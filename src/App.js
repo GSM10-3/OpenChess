@@ -1,24 +1,31 @@
-import logo from './logo.svg';
+import { useState } from 'react';
+import Lobby from './ui/Lobby';
+import GameScreen from './ui/GameScreen';
 import './App.css';
 
 function App() {
+  const [config, setConfig] = useState(null);
+  const [last, setLast] = useState(null);
+  const [round, setRound] = useState(0);
+
+  if (!config) {
+    return (
+      <Lobby
+        initial={last}
+        onStart={(c) => {
+          setLast(c);
+          setConfig(c);
+        }}
+      />
+    );
+  }
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <GameScreen
+      key={`${config.seed}-${round}`}
+      config={config}
+      onExit={() => setConfig(null)}
+      onRestart={() => setRound((r) => r + 1)}
+    />
   );
 }
 

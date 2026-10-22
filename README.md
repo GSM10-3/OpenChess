@@ -1,70 +1,55 @@
-# Getting Started with Create React App
+# OpenChess
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+OpenFront 식 영토 전쟁(땅 · 병력 · 공격 비율 · 배 · 핵 · 봇)에 체스 규칙을 더한 브라우저 게임입니다.
 
-## Available Scripts
+## 실행
 
-In the project directory, you can run:
+- 개발: `npm start` → http://localhost:3000
+- 테스트: `npm test`
+- 배포용 빌드: `npm run build`
 
-### `npm start`
+## 규칙
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+### 기본 (OpenFront 그대로)
+- 빈 땅이나 적 땅을 클릭하면 슬라이더 비율만큼 병력을 보내 공격합니다. 맞닿지 않은 곳은 배로 건너갑니다.
+- 병력은 영토가 넓을수록 많고, 최대치에 가까울수록 천천히 찹니다. 금으로 장군을 출격시키고 핵을 쏩니다 (시작 2분 뒤부터).
+- 휠 확대, 끌어서 이동, Esc 취소, Space 일시정지, B 상륙 모드.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+### 킹
+- 처음 고른 칸에 킹이 놓이고 움직이지 않습니다.
+- 킹이 있는 칸을 빼앗기면 패배하고, 남은 영토와 금은 킹을 잡은 나라가 가져갑니다.
+- 킹이 핵 반경 안에 들면 패배하고, 남은 영토는 무주지가 됩니다.
 
-### `npm test`
+### 장군 (체스 기물)
+| 기물 | 금 | 쓰임 |
+| --- | --- | --- |
+| 비숍 | 3,000 | 해군 · 상륙. 배 2배 속도, 근처 적 배와 해전, 상륙 직후 25칸 기습(방어 무시) |
+| 룩 | 5,000 | 육군 · 지상. 전투력 ×1.5, 넓은 전선을 빠르게. 대기 중이면 반경 5칸 요새(방어 ×1.5) |
+| 나이트 | 3,000 | 전방 · 정면돌파. 클릭한 곳을 향해 좁은 창끝으로 파고들고 지형 · 요새 무시, 전투력 ×1.8 |
+| 퀸 | 9,000 (최대) | 비숍 + 룩. 지상 · 상륙 · 해전 · 기습 모두. 출격할 때마다 투입 병력 50% 손실 |
+| 폰 | 1,000 | 조커픽. 육지 · 바다 어디든. 다른 장군을 이기면 그 기물로 프로모션 |
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- 대기 중인 장군은 지도 위 칸에 서 있고, 그 칸을 빼앗기거나 핵에 맞으면 잡힙니다.
+- 공격이 끝나면 장군은 마지막으로 점령한 칸에 머뭅니다. 내 땅 어디로든 재배치할 수 있습니다.
+- 서로를 공격 중인 두 부대가 맞부딪히면 병력 × 장군 전투력이 큰 쪽만 남고, 진 쪽 장군은 잡힙니다.
 
-### `npm run build`
+### 특수 규칙
+- **프로모션**: 폰이 다른 장군과의 전투(맞공격 · 해전 · 주둔지 점령 · 앙파상)에서 이기면, 그 기물로 바꿀지 고릅니다. 거절하면 폰으로 남고, 한 번 바꾸면 다시 바꿀 수 없습니다.
+- **캐슬링**: 킹이 위협받을 때(공격 중인 적이 킹 8칸 안, 킹을 노리는 나이트 · 배 · 핵) 대기 중인 룩과 킹의 자리를 맞바꿉니다. 한 판에 한 번.
+- **앙파상**: 적 공격 하나가 아래 조건을 모두 채우면, 그 돌파 지역을 통째로 되찾고 그 부대를 섬멸합니다.
+  - 최근 10초 안에 30칸 이상 빼앗김
+  - 8칸 이상 깊이 침투
+  - 돌파 지역 둘레의 65% 이상이 우리 땅
+  - 8칸 안에 대기 중인 폰
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### 승리
+다른 나라의 킹을 모두 잡거나, 육지의 80%를 차지하면 이깁니다.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 구조
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- `src/game/` — 화면과 상관없는 게임 엔진 (테스트: `Game.test.js`)
+  - `Game.js` 영토 · 공격 · 배 · 핵 · 장군 · 캐슬링 / 앙파상 실행
+  - `chess.js` 킹 위협 · 캐슬링 · 앙파상 판정
+  - `pieces.js` 기물 능력치, 시작 배치
+  - `bot.js` 봇, `mapgen.js` 지도 생성, `constants.js` 밸런스 수치
+- `src/ui/` — 캔버스 지도(`MapView`, `painter`)와 HUD(`Hud`, `ChessPanel`), 로비
