@@ -116,6 +116,14 @@ describe('킹', () => {
     expect(kingThreat(game, a)).toEqual({ kind: 'check', by: b });
     expect(castleOptions(game, a).available).toBe(true);
     expect(game.events.some((e) => e.text.includes('체크!'))).toBe(true);
+
+    // 캐슬링을 쓴 뒤에도 새 궁성의 체크는 위협으로 보인다
+    expect(game.castle(a).ok).toBe(true);
+    const k = game.players[a].king;
+    game.setOwner(k + 2, b);
+    const co = castleOptions(game, a);
+    expect(co.available).toBe(false);
+    expect(co.threat).toEqual({ kind: 'check', by: b });
   });
 
   test('체크가 충분히 이어지기 전에는 킹 칸을 빼앗을 수 없다', () => {

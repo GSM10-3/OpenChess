@@ -54,11 +54,11 @@ export function castleOptions(game, pid) {
     res.reason = '아직 킹이 없습니다';
     return res;
   }
+  res.threat = kingThreat(game, pid); // 캐슬링을 이미 했어도 위협 표시는 계속한다
   if (p.castled) {
     res.reason = '캐슬링은 한 판에 한 번만 할 수 있습니다';
     return res;
   }
-  res.threat = kingThreat(game, pid);
   res.rooks = p.generals.filter(
     (g) => g.type === 'rook' && g.status === 'idle' && g.tile !== p.king && game.owner[g.tile] === pid
   );
