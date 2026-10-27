@@ -56,6 +56,18 @@ export const GENERAL_SPEED = 1; // 재배치 이동 속도 (칸/틱)
 export const FORTRESS_RADIUS = 5; // 대기 중인 룩 · 퀸 주변은 요새
 export const FORTRESS_MULT = 1.5;
 export const KNIGHT_WIDTH = 3; // 나이트 창끝 폭 (칸/틱)
+export const BISHOP_WIDTH = 1; // 비숍 대각선 띠: 직선에서 이만큼 벗어난 칸까지
+export const BISHOP_RATE = 3; // 비숍이 한 틱에 점령하는 칸 수
+
+// 시작 보호: 이 틱 전에는 다른 나라를 공격할 수 없다 (무주지만)
+export const PEACE_TICKS = 900; // 90초
+
+// 킹
+export const PALACE_RADIUS = 3; // 킹 주변 궁성. 적이 들어오면 '체크'
+export const PALACE_MULT = 3; // 궁성 칸 점령 비용 배율 (나이트도 무시 못 함)
+export const CHECKMATE_TICKS = 80; // 체크가 8초 이어져야 킹 칸을 빼앗을 수 있다 → 캐슬링 · 반격할 틈
+export const HEIR_LAND_RADIUS = 20; // 킹을 잡으면 이 반경 안의 영토만 넘어오고 나머지는 무주지
+export const HEIR_GOLD_SHARE = 0.5; // 넘어오는 금고 비율
 
 // 체스 규칙
 export const THREAT_RADIUS = 8; // 킹 주변 이 거리 안에 공격 중인 적이 오면 '위협'

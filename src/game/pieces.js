@@ -6,6 +6,7 @@
 // navalBattle: 근처 적 배와 해전을 벌인다
 // fortress: 대기 중이면 주둔지 주변 방어 ×1.5
 // breakthrough: 좁은 창끝으로 목표를 향해 돌파, 지형 · 요새 무시
+// diagonal: 클릭한 쪽 대각선으로 좁고 길게 뻗는다
 // troopLoss: 출격할 때 투입 병력 중 잃는 비율
 
 const T = '︎'; // 글리프를 이모지가 아니라 글자로 그리게 한다
@@ -31,8 +32,8 @@ export const PIECES = {
     surprise: 40,
     navalBattle: true,
     fortress: true,
-    troopLoss: 0.5,
-    role: '비숍 + 룩. 지상 · 상륙 · 해전 · 기습 모두 가능. 대신 출격할 때마다 투입 병력 50% 손실, 비용 최대.',
+    troopLoss: 0.25,
+    role: '비숍 + 룩. 지상 · 상륙 · 해전 · 기습 모두 가능. 대신 출격할 때마다 투입 병력 25% 손실, 비용 최대.',
   },
   rook: {
     name: '룩',
@@ -50,12 +51,15 @@ export const PIECES = {
     glyph: '♝' + T,
     value: 3,
     cost: 3000,
+    land: true,
     sea: true,
+    landPower: 1.3,
+    diagonal: true,
     seaPower: 1.5,
     seaSpeed: 2,
     surprise: 25,
     navalBattle: true,
-    role: '해군 · 상륙. 배가 2배 빠르고, 적 배와 해전을 벌이며, 상륙 직후 기습합니다.',
+    role: '대각선 · 해군. 땅에서는 클릭한 쪽 대각선으로 좁고 길게 뻗고, 바다에서는 배가 2배 빠르며 해전 · 상륙 기습을 합니다.',
   },
   knight: {
     name: '나이트',

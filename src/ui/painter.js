@@ -320,6 +320,22 @@ export function drawScene(ctx, game, painter, cam, view, ui, hover, now) {
     }
   }
 
+  // 내 궁성: 체크면 빨갛게 깜빡인다
+  const me = game.human;
+  if (me && me.alive && me.king >= 0) {
+    const [x, y] = S(me.king);
+    ctx.beginPath();
+    ctx.arc(x, y, (C.PALACE_RADIUS + 0.5) * z, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.6)';
+    ctx.lineWidth = me.check ? 5 : 3.5;
+    ctx.stroke();
+    ctx.setLineDash(me.check ? [] : [5, 4]);
+    ctx.strokeStyle = me.check ? `rgba(239, 68, 68, ${0.6 + 0.4 * pulse})` : 'rgba(250, 204, 21, 0.95)';
+    ctx.lineWidth = me.check ? 3 : 1.5;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   // 킹
   const kSize = clamp(z * 3, 18, 40);
   for (const p of game.players) {

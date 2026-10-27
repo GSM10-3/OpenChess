@@ -5,6 +5,7 @@ import { fmt } from '../game/Game';
 const FILES = 'abcdefgh'.split('');
 const STATUS = { idle: '대기', busy: '출격 중', moving: '이동 중', captured: '잡힘' };
 const THREAT = {
+  check: '♚ 체크! 적이 궁성에 들어왔습니다',
   nuke: '☢ 핵이 킹을 노리고 있습니다',
   boat: '⛵ 적 배가 킹 근처로 상륙 중',
   knight: '♞ 적 나이트가 킹을 향해 돌파 중',
@@ -19,6 +20,7 @@ function stats(spec) {
   if (spec.navalBattle) out.push('해전');
   if (spec.fortress) out.push(`요새 반경 ${C.FORTRESS_RADIUS}`);
   if (spec.breakthrough) out.push('지형·요새 무시');
+  if (spec.diagonal) out.push('대각선 돌파');
   if (spec.troopLoss) out.push(`출격 시 병력 -${spec.troopLoss * 100}%`);
   return out.join(' · ');
 }
@@ -64,6 +66,11 @@ export default function ChessPanel({ game, generalId, castle, ep, offer, onResol
         </button>
       </div>
       {castle.threat && <div className="threat">{THREAT[castle.threat.kind]} ({game.players[castle.threat.by]?.name})</div>}
+      {p.check > 0 && (
+        <div className="threat">
+          체크메이트까지 {Math.max(0, Math.ceil((C.CHECKMATE_TICKS - (game.tick - p.checkSince)) / 10))}초 — 궁성의 적을 몰아내거나 캐슬링하세요
+        </div>
+      )}
 
       <div className="rule">
         <div className="rule-head">

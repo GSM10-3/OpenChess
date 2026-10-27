@@ -7,6 +7,9 @@ export function kingThreat(game, pid) {
   const p = game.players[pid];
   if (!p || !p.alive || p.king < 0) return null;
 
+  const checker = game.checkBy(pid);
+  if (checker) return { kind: 'check', by: checker };
+
   for (const n of game.nukes) {
     if (n.done || n.owner === pid) continue;
     const r = C.NUKES[n.kind].radius + 2;

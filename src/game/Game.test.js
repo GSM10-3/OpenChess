@@ -13,6 +13,7 @@ function flatMap(width, height, water = []) {
 
 function setup({ width = 60, height = 40, water = [] } = {}) {
   const game = new Game({ map: flatMap(width, height, water), bots: 0, human: false, seed: 7 });
+  game.tick = C.PEACE_TICKS; // 평화 기간은 따로 시험한다
   const at = (x, y) => y * width + x;
   const add = (name, x, y) => {
     const id = game.addPlayer({ name });
@@ -64,12 +65,17 @@ describe('시작 배치', () => {
 });
 
 describe('킹', () => {
-  test('킹이 있는 칸을 빼앗기면 패배하고, 영토는 잡은 나라가 갖는다', () => {
-    const { game, add } = setup();
+  test('킹이 있는 칸을 빼앗기면 패배하고, 킹 주변 영토와 금고 절반은 잡은 나라가 갖는다', () => {
+    const { game, add, at } = setup({ width: 80 });
     const a = add('A', 15, 20);
     const b = add('B', 26, 20);
+    add('C', 75, 35); // 한 나라만 남으면 판이 끝나므로
+    // B 에게 킹에서 먼 땅도 준다
+    for (let x = 50; x < 60; x++) game.setOwner(at(x, 20), b);
     game.players[a].troops = 200000;
+    game.players[a].gold = 0;
     game.players[b].troops = 100;
+    game.players[b].gold = 10000;
     const res = game.launchAttack(a, game.players[b].king, { ratio: 1 });
     expect(res.ok).toBe(true);
     run(game, 200);
@@ -77,6 +83,57 @@ describe('킹', () => {
     expect(game.players[b].deathCause).toBe('conquest');
     expect(game.players[b].tiles).toBe(0);
     expect(game.players[b].generals.every((g) => g.status === 'captured')).toBe(true);
+    expect(game.owner[at(26, 24)]).toBe(a); // 킹 곁은 넘어오고
+    expect(game.owner[at(55, 20)]).toBe(0); // 먼 땅은 무주지
+    expect(game.players[a].gold).toBeGreaterThanOrEqual(10000 * C.HEIR_GOLD_SHARE);
+    expect(game.players[a].gold).toBeLessThan(10000);
+  });
+
+  test('궁성 칸은 점령 비용이 비싸고, 나이트도 이를 무시하지 못한다', () => {
+    const { game, add, at } = setup();
+    const a = add('A', 15, 20);
+    const b = add('B', 26, 20);
+    for (const g of game.players[b].generals) game.captureGeneral(g, 0, null); // 요새 효과 빼고
+    const knight = game.findGeneral(a, `${a}:b`);
+    for (const general of [null, knight]) {
+      const atk = game.newAttack({ attacker: a, target: b, troops: 1, general, kind: general ? 'knight' : 'land', origin: 0, frontier: new Set() });
+      atk.breakthrough = !!general?.breakthrough;
+      const inside = game.tileCost(atk, at(26, 23));
+      const outside = game.tileCost(atk, at(26, 25));
+      expect(inside).toBeCloseTo(outside * C.PALACE_MULT);
+    }
+  });
+
+  test('적이 궁성에 들어오면 체크가 되고 캐슬링할 수 있다', () => {
+    const { game, add, at } = setup();
+    const a = add('A', 15, 20);
+    const b = add('B', 26, 20);
+    run(game, 1);
+    expect(game.players[a].check).toBe(0);
+    game.setOwner(at(17, 20), b);
+    run(game, 1);
+    expect(game.players[a].check).toBe(b);
+    expect(kingThreat(game, a)).toEqual({ kind: 'check', by: b });
+    expect(castleOptions(game, a).available).toBe(true);
+    expect(game.events.some((e) => e.text.includes('체크!'))).toBe(true);
+  });
+
+  test('체크가 충분히 이어지기 전에는 킹 칸을 빼앗을 수 없다', () => {
+    const { game, add } = setup({ width: 80 });
+    const a = add('A', 15, 20);
+    const b = add('B', 26, 20);
+    add('C', 75, 35);
+    game.players[a].troops = 500000;
+    game.players[b].troops = 0;
+    game.launchAttack(a, game.players[b].king, { ratio: 1 });
+    let mateTick = -1;
+    for (let i = 0; i < 300 && mateTick < 0; i++) {
+      game.update();
+      if (!game.players[b].alive) mateTick = game.tick;
+    }
+    const pb = game.players[b];
+    expect(pb.alive).toBe(false);
+    expect(mateTick - pb.checkSince).toBeGreaterThanOrEqual(C.CHECKMATE_TICKS);
   });
 
   test('킹이 핵에 맞으면 패배하고, 남은 영토는 무주지가 된다', () => {
@@ -102,7 +159,7 @@ describe('킹', () => {
 });
 
 describe('장군', () => {
-  test('비숍은 지상 공격을 못 하고, 룩 · 나이트는 바다를 못 건넌다', () => {
+  test('룩 · 나이트는 바다를 못 건너고, 비숍은 배로 건넌다', () => {
     // 가운데 x=30 줄이 바다
     const water = [];
     for (let y = 0; y < 40; y++) water.push([30, y]);
@@ -123,7 +180,7 @@ describe('장군', () => {
     void b;
   });
 
-  test('퀸은 출격할 때 투입 병력 절반을 잃고 비용이 가장 비싸다', () => {
+  test('퀸은 출격할 때 투입 병력 4분의 1을 잃고 비용이 가장 비싸다', () => {
     const { game, add, at } = setup();
     const a = add('A', 20, 20);
     const p = game.players[a];
@@ -132,7 +189,7 @@ describe('장군', () => {
     const queen = game.findGeneral(a, `${a}:d`);
     game.launchAttack(a, at(40, 20), { ratio: 0.5, generalId: queen.id });
     expect(p.gold).toBe(20000 - PIECES.queen.cost);
-    expect(game.attacks[0].troops).toBe(2500);
+    expect(game.attacks[0].troops).toBe(3750);
     expect(p.troops).toBe(5000);
     const costs = ['rook', 'bishop', 'knight', 'pawn'].map((t) => PIECES[t].cost);
     expect(Math.max(...costs)).toBeLessThan(PIECES.queen.cost);
@@ -153,6 +210,23 @@ describe('장군', () => {
     expect(game.owner[at(25, 35)]).toBe(0);
   });
 
+  test('비숍은 땅에서 클릭한 쪽 대각선으로 좁고 길게 뻗는다', () => {
+    const { game, add, at } = setup({ width: 80, height: 60 });
+    const a = add('A', 15, 15);
+    add('B', 75, 55);
+    const p = game.players[a];
+    p.troops = 50000;
+    p.gold = 10000;
+    const bishop = game.findGeneral(a, `${a}:c`);
+    expect(game.launchAttack(a, at(40, 40), { ratio: 0.5, generalId: bishop.id }).ok).toBe(true);
+    expect(game.attacks[0].kind).toBe('diagonal');
+    run(game, 30);
+    // 남동쪽 대각선 위는 차지하고, 같은 거리의 정동 · 정남은 비어 있다
+    expect(game.owner[at(30, 30)]).toBe(a);
+    expect(game.owner[at(37, 15)]).toBe(0);
+    expect(game.owner[at(15, 37)]).toBe(0);
+  });
+
   test('공격이 끝나면 장군은 마지막으로 점령한 칸에 주둔하고, 그 칸을 빼앗기면 잡힌다', () => {
     const { game, add, at } = setup();
     const a = add('A', 15, 20);
@@ -167,6 +241,20 @@ describe('장군', () => {
     // B 가 그 칸을 빼앗는다
     game.setOwner(rook.tile, b);
     expect(rook.status).toBe('captured');
+  });
+});
+
+describe('평화 기간', () => {
+  test('시작 직후에는 다른 나라를 공격할 수 없고, 무주지는 넓힐 수 있다', () => {
+    const { game, add, at } = setup();
+    game.tick = 0;
+    const a = add('A', 15, 20);
+    const b = add('B', 26, 20);
+    game.players[a].troops = 10000;
+    expect(game.launchAttack(a, game.players[b].king, { ratio: 0.5 }).ok).toBe(false);
+    expect(game.launchAttack(a, at(15, 30), { ratio: 0.2 }).ok).toBe(true);
+    game.tick = C.PEACE_TICKS;
+    expect(game.launchAttack(a, game.players[b].king, { ratio: 0.5 }).ok).toBe(true);
   });
 });
 

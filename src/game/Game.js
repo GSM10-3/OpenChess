@@ -139,6 +139,8 @@ export class Game {
       sumY: 0,
       king: -1,
       castled: false,
+      check: 0, // 궁성에 들어온 적 (체크), 없으면 0
+      checkSince: 0, // 체크가 시작된 틱
       generals: [],
       offers: [], // 프로모션 제안 (사람만)
       killedBy: 0,
@@ -282,12 +284,16 @@ export class Game {
     for (const a of this.attacks) if (a.attacker === vid) a.done = true;
     for (const b of this.boats) if (b.owner === vid) b.done = true;
     for (const n of this.nukes) if (n.owner === vid) n.done = true;
-    // 왕을 잡은 나라가 남은 영토와 금고를 통째로 차지한다. 피폭이면 영토는 무주지가 된다.
+    // 왕을 잡은 나라는 킹 주변 영토와 금고 절반을 차지하고, 나머지 땅은 무주지가 된다. 피폭이면 전부 무주지.
     const heir = cause === 'conquest' && k && k.alive ? killerId : 0;
-    if (heir) k.gold += v.gold;
+    if (heir) k.gold += v.gold * C.HEIR_GOLD_SHARE;
     v.troops = 0;
     v.gold = 0;
-    for (let t = 0; t < this.N; t++) if (this.owner[t] === vid) this.setOwner(t, heir);
+    v.check = 0;
+    const r2 = C.HEIR_LAND_RADIUS * C.HEIR_LAND_RADIUS;
+    for (let t = 0; t < this.N; t++) {
+      if (this.owner[t] === vid) this.setOwner(t, heir && this.dist2(t, v.king) <= r2 ? heir : 0);
+    }
   }
 
   // ───────────── 장군 ─────────────
@@ -406,6 +412,45 @@ export class Game {
     return false;
   }
 
+  inPalace(pid, t) {
+    const p = this.players[pid];
+    return !!p && p.alive && p.king >= 0 && this.dist2(p.king, t) <= C.PALACE_RADIUS * C.PALACE_RADIUS;
+  }
+
+  // 궁성 안에 적 땅이 있으면 그 나라 번호 (체크), 없으면 0
+  checkBy(pid) {
+    const p = this.players[pid];
+    if (!p || !p.alive || p.king < 0) return 0;
+    const r = C.PALACE_RADIUS;
+    const kx = p.king % this.W;
+    const ky = (p.king / this.W) | 0;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const x = kx + dx;
+        const y = ky + dy;
+        if (x < 0 || y < 0 || x >= this.W || y >= this.H || dx * dx + dy * dy > r * r) continue;
+        const o = this.owner[y * this.W + x];
+        if (o && o !== pid && this.players[o].alive) return o;
+      }
+    }
+    return 0;
+  }
+
+  // 체크가 충분히 이어지기 전에는 킹 칸을 빼앗을 수 없다
+  kingGuarded(pid, t) {
+    const p = this.players[pid];
+    if (!pid || p.king !== t) return false;
+    return !p.check || this.tick - p.checkSince < C.CHECKMATE_TICKS;
+  }
+
+  peaceLeft() {
+    return Math.max(0, C.PEACE_TICKS - this.tick);
+  }
+
+  peaceFail() {
+    return fail(`평화 기간: ${Math.ceil(this.peaceLeft() / 10)}초 뒤부터 다른 나라를 공격할 수 있습니다`);
+  }
+
   // 장군 비용 · 병력 떼어내기
   commitForces(p, ratio, general) {
     const spec = general ? PIECES[general.type] : null;
@@ -469,6 +514,7 @@ export class Game {
     if (!this.isLand(tile)) return fail('육지를 골라 주세요');
     const target = this.owner[tile];
     if (target === pid) return fail('이미 내 땅입니다');
+    if (target && this.peaceLeft()) return this.peaceFail();
     let general = null;
     if (generalId) {
       general = this.findGeneral(pid, generalId);
@@ -486,11 +532,12 @@ export class Game {
       target,
       troops: c.troops,
       general,
-      kind: knight ? 'knight' : 'land',
+      kind: knight ? 'knight' : spec?.diagonal ? 'diagonal' : 'land',
       origin: tile,
       aim: knight ? tile : -1,
       frontier,
     });
+    if (a.kind === 'diagonal') a.diag = this.diagonalLine(p, tile, frontier);
     const tName = target ? this.players[target].name : '무주지';
     if (general) this.log(`${spec.glyph} ${p.name}의 ${josa(pieceLabel(general), '이/가')} ${josa(tName, '으로/로')} 출격 (병력 ${fmt(c.troops)})`, 'chess', [pid, target]);
 
@@ -542,6 +589,33 @@ export class Game {
     if (loser.general) this.captureGeneral(loser.general, winner.attacker, winner.general);
   }
 
+  // 비숍의 대각선: 내 영토 중심 → 클릭한 곳 방향을 45° 로 맞추고, 클릭한 곳에서 가장 가까운 전선 칸을 지나는 직선
+  diagonalLine(p, tile, frontier) {
+    const tx = tile % this.W;
+    const ty = (tile / this.W) | 0;
+    const dx = tx >= p.sumX / Math.max(1, p.tiles) ? 1 : -1;
+    const dy = ty >= p.sumY / Math.max(1, p.tiles) ? 1 : -1;
+    let start = tile;
+    let best = Infinity;
+    for (const t of frontier) {
+      const d2 = this.dist2(t, tile);
+      if (d2 < best) {
+        best = d2;
+        start = t;
+      }
+    }
+    return { sx: start % this.W, sy: (start / this.W) | 0, dx, dy };
+  }
+
+  // 대각선 띠 위의 칸이면 진행 거리를, 아니면 -1
+  diagonalProgress(line, t) {
+    const x = (t % this.W) - line.sx;
+    const y = ((t / this.W) | 0) - line.sy;
+    if (Math.abs(x * line.dy - y * line.dx) > C.BISHOP_WIDTH) return -1;
+    const along = x * line.dx + y * line.dy;
+    return along >= -1 ? along : -1;
+  }
+
   tileCost(a, t) {
     const terr = a.breakthrough ? 1 : C.TERRAIN_COST[this.terrain[t]];
     let cost;
@@ -552,6 +626,7 @@ export class Game {
       cost = (C.NEUTRAL_TILE_COST + this.density(d) * C.DEFENSE_FACTOR) * terr;
       if (!a.breakthrough && this.inFortress(a.target, t)) cost *= C.FORTRESS_MULT;
     }
+    if (a.target && this.inPalace(a.target, t)) cost *= C.PALACE_MULT;
     return cost / a.power;
   }
 
@@ -594,7 +669,19 @@ export class Game {
     if (!cands.length) return this.endAttack(a);
 
     let n;
-    if (a.kind === 'knight') {
+    if (a.kind === 'diagonal') {
+      // 띠 위의 칸만, 출발점에 가까운 칸부터 → 좁고 길게 뻗는다
+      const scored = [];
+      for (const t of cands) {
+        const along = this.diagonalProgress(a.diag, t);
+        if (along >= 0) scored.push([t, along + this.rng()]);
+      }
+      if (!scored.length) return this.endAttack(a);
+      scored.sort((x, y) => x[1] - y[1]);
+      cands.length = 0;
+      for (const [t] of scored) cands.push(t);
+      n = Math.max(1, Math.round(C.BISHOP_RATE * a.speed));
+    } else if (a.kind === 'knight') {
       n = Math.max(1, Math.round(C.KNIGHT_WIDTH * a.speed));
       const scored = cands.map((t) => [t, this.dist2(t, a.aim) + this.rng()]);
       scored.sort((x, y) => x[1] - y[1]);
@@ -619,7 +706,7 @@ export class Game {
 
     for (let i = 0; i < n && i < cands.length; i++) {
       const t = cands[i];
-      if (this.owner[t] !== a.target) continue;
+      if (this.owner[t] !== a.target || this.kingGuarded(a.target, t)) continue;
       if (!this.capture(a, t)) return this.endAttack(a);
       if (a.done || !att.alive) return;
       if (a.kind === 'knight' && t === a.aim) return this.endAttack(a);
@@ -707,11 +794,13 @@ export class Game {
   launchBoat(p, tile, ratio, general) {
     const spec = general ? PIECES[general.type] : null;
     if (spec && !spec.sea) return fail(`${josa(spec.name, '은/는')} 바다를 건널 수 없습니다 — 맞닿은 땅만 공격할 수 있어요`);
+    if (this.owner[tile] && this.peaceLeft()) return this.peaceFail();
     if (this.boats.filter((b) => !b.done && b.owner === p.id).length >= C.MAX_BOATS) {
       return fail(`배는 동시에 ${C.MAX_BOATS}척까지 띄울 수 있습니다`);
     }
     const landing = this.findLanding(p.id, tile);
     if (landing < 0) return fail('근처에 상륙할 해안이 없습니다');
+    if (this.owner[landing] && this.peaceLeft()) return this.peaceFail();
     const path = this.seaPath(p.id, landing);
     if (!path) return fail('그곳으로 가는 바닷길이 없습니다');
     const c = this.commitForces(p, ratio, general);
@@ -776,7 +865,7 @@ export class Game {
     if (!p.alive) return;
     const L = b.landing;
     const target = this.owner[L];
-    if (target === b.owner) {
+    if (target === b.owner || (target && this.peaceLeft())) {
       p.troops += b.troops;
       if (b.general) this.station(b.general, L);
       return;
@@ -792,7 +881,7 @@ export class Game {
       landing: true,
     });
     this.attacks.push(a);
-    if (!this.capture(a, L)) {
+    if (this.kingGuarded(target, L) || !this.capture(a, L)) {
       a.done = true;
       this.log(`${p.name}의 상륙이 해안에서 막혔습니다`, 'info', [b.owner, target]);
       if (b.general) this.station(b.general, p.king);
@@ -954,6 +1043,16 @@ export class Game {
       if (p.troops > max) p.troops -= (p.troops - max) * 0.01;
       else p.troops = Math.min(max, p.troops + C.troopRegen(p.troops, max));
       p.gold += C.goldIncome(p.tiles);
+    }
+    for (const p of this.players) {
+      if (!p || !p.alive || !p.spawned) continue;
+      const by = this.checkBy(p.id);
+      if (by && !p.check) {
+        p.checkSince = this.tick;
+        p.bot.nextThink = Math.min(p.bot.nextThink, this.tick + 5); // 봇도 곧바로 대응한다
+        this.log(`♚ 체크! ${josa(this.players[by].name, '이/가')} ${p.name}의 궁성에 들어왔습니다`, 'chess', [p.id, by]);
+      }
+      p.check = by;
     }
     for (const p of this.players) if (p && !p.isHuman) botThink(this, p);
     this.stepMovers();

@@ -8,10 +8,11 @@ export const BOT_NAMES = [
   '아라곤', '브리타니아', '프로이센', '베네치아', '보헤미아',
 ];
 
+// focusCheck: 체크에 걸린 나라를 먼저 노릴 확률, targetHuman: 사람을 공격 대상에 넣을 확률
 export const DIFFICULTY = {
-  easy: { label: '쉬움', interval: 30, minTroops: 0.5, ratio: 0.2, nukeChance: 0.02, kingSnipe: 0.1, generals: 0.3 },
-  normal: { label: '보통', interval: 18, minTroops: 0.4, ratio: 0.28, nukeChance: 0.05, kingSnipe: 0.25, generals: 0.5 },
-  hard: { label: '어려움', interval: 10, minTroops: 0.3, ratio: 0.35, nukeChance: 0.08, kingSnipe: 0.4, generals: 0.7 },
+  easy: { label: '쉬움', interval: 30, minTroops: 0.5, ratio: 0.2, nukeChance: 0.02, kingSnipe: 0.1, generals: 0.3, focusCheck: 0, targetHuman: 0.3 },
+  normal: { label: '보통', interval: 18, minTroops: 0.4, ratio: 0.28, nukeChance: 0.05, kingSnipe: 0.25, generals: 0.5, focusCheck: 0.5, targetHuman: 1 },
+  hard: { label: '어려움', interval: 10, minTroops: 0.3, ratio: 0.35, nukeChance: 0.08, kingSnipe: 0.4, generals: 0.7, focusCheck: 0.9, targetHuman: 1 },
 };
 
 // 내 땅에 맞닿은 주인별로 칸 하나씩
@@ -58,14 +59,31 @@ function tryNuke(game, p, d) {
   game.launchNuke(p.id, tile, kind);
 }
 
-function pickBoatTarget(game, p) {
+// 궁성 안에 들어온 적 땅 하나
+function palaceIntruder(game, p) {
+  const r = C.PALACE_RADIUS;
+  const kx = p.king % game.W;
+  const ky = (p.king / game.W) | 0;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const x = kx + dx;
+      const y = ky + dy;
+      if (x < 0 || y < 0 || x >= game.W || y >= game.H || dx * dx + dy * dy > r * r) continue;
+      const t = y * game.W + x;
+      if (game.owner[t] === p.check) return t;
+    }
+  }
+  return -1;
+}
+
+function pickBoatTarget(game, p, neutralOnly) {
   const cx = p.sumX / Math.max(1, p.tiles);
   const cy = p.sumY / Math.max(1, p.tiles);
   let best = -1;
   let bestD = Infinity;
   for (let i = 0; i < 30; i++) {
     const t = game.coastTiles[Math.floor(game.rng() * game.coastTiles.length)];
-    if (t === undefined || game.owner[t] === p.id) continue;
+    if (t === undefined || game.owner[t] === p.id || (neutralOnly && game.owner[t])) continue;
     const d = ((t % game.W) - cx) ** 2 + (((t / game.W) | 0) - cy) ** 2;
     if (d < bestD) {
       bestD = d;
@@ -96,34 +114,48 @@ export function botThink(game, p) {
 
   if (game.tick >= C.NUKE_UNLOCK_TICK && rng() < d.nukeChance) tryNuke(game, p, d);
 
-  if (p.troops < C.maxTroops(p.tiles) * d.minTroops) return;
+  // 내 킹이 체크면 먼저 궁성에 들어온 적을 몰아내고, 남은 병력은 아껴 둔다
+  const inCheck = p.check && game.players[p.check]?.alive;
+  if (inCheck) {
+    const t = palaceIntruder(game, p);
+    if (t >= 0 && game.touches(t, p.id)) {
+      const general = idle(game, p, ['rook', 'pawn']);
+      game.launchAttack(p.id, t, { ratio: 0.5, generalId: general?.id });
+      return;
+    }
+  }
+  if (p.troops < C.maxTroops(p.tiles) * (inCheck ? Math.max(0.6, d.minTroops) : d.minTroops)) return;
   const ratio = d.ratio + rng() * 0.15;
   const nb = scanNeighbors(game, p.id);
+  const peace = game.peaceLeft() > 0;
 
-  if (nb.has(0) && (nb.size === 1 || rng() < 0.7)) {
+  if (!inCheck && nb.has(0) && (nb.size === 1 || peace || rng() < 0.7)) {
     game.launchAttack(p.id, nb.get(0), { ratio });
     return;
   }
 
-  const enemies = [...nb.keys()].filter((o) => o !== 0);
+  let enemies = peace ? [] : [...nb.keys()].filter((o) => o !== 0 && (!game.players[o].isHuman || rng() < d.targetHuman));
+  if (inCheck) enemies = enemies.filter((o) => o === p.check);
   if (enemies.length && rng() < 0.92) {
-    const target = enemies.reduce((a, b) => (game.density(game.players[b]) < game.density(game.players[a]) ? b : a));
+    const checked = enemies.filter((o) => game.players[o].check);
+    const pool = checked.length && rng() < d.focusCheck ? checked : enemies;
+    const target = pool.reduce((a, b) => (game.density(game.players[b]) < game.density(game.players[a]) ? b : a));
     const tp = game.players[target];
     let aim = nb.get(target);
     let general = null;
     if (rng() < d.generals) {
       const kingClose = game.dist2(aim, tp.king) <= 35 * 35;
-      if (kingClose && rng() < 0.5) general = idle(game, p, ['knight']);
-      if (!general && p.gold > 25000 && rng() < 0.15) general = idle(game, p, ['queen']);
-      if (!general) general = idle(game, p, ['rook', 'pawn', 'knight'], 1000);
-      if (general?.type === 'knight') aim = kingClose ? tp.king : randomTileOf(game, target);
+      if (kingClose && rng() < 0.5) general = idle(game, p, ['knight', 'bishop']);
+      if (!general && p.gold > 15000 && rng() < 0.25) general = idle(game, p, ['queen']);
+      if (!general) general = idle(game, p, ['rook', 'bishop', 'pawn', 'knight'], 1000);
+      if (general?.type === 'knight' || general?.type === 'bishop') aim = kingClose ? tp.king : randomTileOf(game, target);
     }
     game.launchAttack(p.id, aim, { ratio, generalId: general?.id });
     return;
   }
 
-  if (rng() < 0.5) {
-    const tile = pickBoatTarget(game, p);
+  if (!inCheck && rng() < 0.5) {
+    const tile = pickBoatTarget(game, p, peace);
     if (tile < 0) return;
     const general = rng() < d.generals ? idle(game, p, ['bishop', 'pawn'], 1000) : null;
     game.launchAttack(p.id, tile, { ratio, generalId: general?.id, forceBoat: true });
