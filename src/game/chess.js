@@ -7,6 +7,9 @@ export function kingThreat(game, pid) {
   const p = game.players[pid];
   if (!p || !p.alive || p.king < 0) return null;
 
+  const checker = game.checkBy(pid);
+  if (checker) return { kind: 'check', by: checker };
+
   for (const n of game.nukes) {
     if (n.done || n.owner === pid) continue;
     const r = C.NUKES[n.kind].radius + 2;
@@ -51,11 +54,11 @@ export function castleOptions(game, pid) {
     res.reason = '아직 킹이 없습니다';
     return res;
   }
+  res.threat = kingThreat(game, pid); // 캐슬링을 이미 했어도 위협 표시는 계속한다
   if (p.castled) {
     res.reason = '캐슬링은 한 판에 한 번만 할 수 있습니다';
     return res;
   }
-  res.threat = kingThreat(game, pid);
   res.rooks = p.generals.filter(
     (g) => g.type === 'rook' && g.status === 'idle' && g.tile !== p.king && game.owner[g.tile] === pid
   );

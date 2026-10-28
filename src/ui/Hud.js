@@ -33,6 +33,12 @@ export function TopBar({ game, paused, speed, onPause, onSpeed, onExit }) {
         <span className="stat-label">시간</span>
         <b>{clock(game.tick)}</b>
       </div>
+      {game.peaceLeft() > 0 && (
+        <div className="stat" title="이 시간 동안은 무주지만 넓힐 수 있습니다">
+          <span className="stat-label">평화</span>
+          <b className="safe">{Math.ceil(game.peaceLeft() / 10)}초</b>
+        </div>
+      )}
       <div className="topbar-buttons">
         <button onClick={onPause} title="Space">{paused ? '▶ 계속' : '⏸ 멈춤'}</button>
         <button onClick={onSpeed} title="게임 속도">×{speed}</button>
