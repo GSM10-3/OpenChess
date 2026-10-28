@@ -1,15 +1,33 @@
 :root {
-  --bg: #0a1726;
-  --panel: rgba(13, 22, 38, 0.88);
-  --line: rgba(148, 163, 184, 0.22);
-  --text: #e2e8f0;
-  --muted: #94a3b8;
+  --bg: #0a1220;
+  --panel: rgba(9, 14, 26, 0.74);
+  --panel-solid: #111a2c;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --text: #e8edf5;
+  --muted: #8a97ab;
   --accent: #facc15;
   --good: #4ade80;
   --bad: #f87171;
   --chess: #c4b5fd;
-  --sq-light: #e8dcc2;
-  --sq-dark: #b08b62;
+  --sq-light: #ecdcbf;
+  --sq-dark: #b48a5f;
+  --radius: 14px;
+  --font: 'Noto Sans KR', system-ui, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  --glyph-font: 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', 'Apple Symbols', serif;
+}
+
+/* 체스 글리프는 한글 글꼴이 아니라 기호 글꼴로 (지도 그리기와 같은 글꼴) */
+.glyph,
+.logo-glyph,
+.intro-glyph,
+.leader-glyph,
+.king-glyph,
+.banner-glyph,
+.action-glyph,
+.promo-glyphs,
+.result-glyph {
+  font-family: var(--glyph-font);
 }
 
 * {
@@ -23,45 +41,69 @@ body,
 }
 
 body {
+  margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  font-family: var(--font);
   font-size: 14px;
+  -webkit-font-smoothing: antialiased;
 }
 
 button {
   font: inherit;
   color: var(--text);
-  background: rgba(51, 65, 85, 0.85);
+  background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: 10px;
   padding: 6px 10px;
   cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, transform 0.08s;
 }
 button:hover:not(:disabled) {
-  background: rgba(71, 85, 105, 0.95);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--line-strong);
+}
+button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 button:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 button.active {
-  background: #1d4ed8;
+  background: rgba(59, 130, 246, 0.35);
   border-color: #60a5fa;
 }
 button.go {
-  background: #15803d;
+  background: #16a34a;
   border-color: #4ade80;
   font-weight: 700;
 }
 button.go:hover:not(:disabled) {
-  background: #16a34a;
+  background: #22c55e;
 }
 button.small {
-  padding: 2px 8px;
+  padding: 2px 9px;
   font-size: 12px;
+  border-radius: 8px;
 }
-button.right {
+button.icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 13px;
+}
+button.flat {
+  background: none;
+  border: 0;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+}
+.right {
   margin-left: auto;
 }
 
@@ -69,10 +111,14 @@ input,
 select {
   font: inherit;
   color: var(--text);
-  background: rgba(15, 23, 42, 0.9);
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 6px 8px;
+  border-radius: 10px;
+  padding: 7px 10px;
+}
+input[type='range'] {
+  accent-color: var(--accent);
+  padding: 0;
 }
 
 .muted {
@@ -80,7 +126,10 @@ select {
 }
 .small-text {
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.5;
+}
+.center {
+  text-align: center;
 }
 .num {
   text-align: right;
@@ -96,17 +145,17 @@ select {
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 10px 12px;
-  backdrop-filter: blur(6px);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
 .panel-title {
   display: flex;
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  margin: 2px 0 8px;
+  font-size: 13px;
 }
 
 /* ───────── 게임 화면 ───────── */
@@ -132,119 +181,133 @@ select {
 
 .game > .panel,
 .game > .toast,
-.game > .ep-alert,
-.game > .paused {
+.game > .paused,
+.game > .eventlog,
+.game > .chess-banner,
+.game > .check-timer,
+.game > .action-dock {
   position: absolute;
   z-index: 2;
 }
 
+/* 상단 바 */
 .topbar {
-  top: 10px;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 18px;
-  padding: 8px 14px;
+  padding: 6px 8px 6px 18px;
+  border-radius: 999px;
   white-space: nowrap;
 }
 .stat {
   display: flex;
-  align-items: baseline;
-  gap: 5px;
-}
-.stat-label {
-  color: var(--muted);
-  font-size: 12px;
+  align-items: center;
+  gap: 6px;
 }
 .stat b {
   font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
+.stat-icon {
+  font-size: 13px;
+  color: var(--muted);
+}
+.stat-icon.gold,
 .gold {
   color: var(--accent);
 }
-.gain {
+.stat.peace b {
   color: var(--good);
-  font-size: 12px;
+}
+.bar {
+  width: 56px;
+  height: 5px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #60a5fa, #a5f3fc);
 }
 .topbar-buttons {
   display: flex;
-  gap: 6px;
+  gap: 4px;
 }
 
+/* 순위 */
 .leaderboard {
-  top: 10px;
-  left: 10px;
-  width: 270px;
+  top: 12px;
+  left: 12px;
+  width: 200px;
+  padding: 8px 12px;
 }
-.leaderboard table {
-  width: 100%;
-  border-collapse: collapse;
+.leaderboard ol {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
   font-size: 13px;
 }
-.leaderboard td {
-  padding: 2px 4px;
+.leaderboard li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0;
 }
-.leaderboard tr.me td {
+.leaderboard li.me {
   color: var(--accent);
   font-weight: 700;
 }
-.leaderboard tr.dead td {
-  color: #64748b;
-  text-decoration: line-through;
-}
 .leaderboard .rank {
-  width: 18px;
+  width: 14px;
   color: var(--muted);
+  font-size: 12px;
 }
-.leaderboard .king-state {
-  width: 18px;
-  text-align: center;
-  text-decoration: none !important;
+.leaderboard .name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dot {
   display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  margin-right: 6px;
-  vertical-align: -1px;
+  flex: none;
 }
 
+/* 공격 */
 .controls {
-  bottom: 10px;
-  left: 10px;
-  width: 360px;
+  bottom: 12px;
+  left: 12px;
+  width: 290px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .ratio {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 10px;
 }
 .ratio input {
-  width: 100%;
-  accent-color: var(--accent);
-  padding: 0;
+  flex: 1;
 }
-.leader {
+.ratio-value {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  background: rgba(30, 41, 59, 0.7);
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 50px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
 }
-.leader button {
-  margin-left: auto;
-}
-.leader-glyph {
-  font-size: 24px;
-  line-height: 1;
+.ratio-value .muted {
+  font-size: 11px;
 }
 .modes {
   display: grid;
@@ -252,19 +315,53 @@ select {
   gap: 5px;
 }
 .modes button {
-  padding: 6px 4px;
-  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 2px 5px;
+}
+.mode-icon {
+  font-size: 17px;
+  line-height: 1;
+}
+.mode-name {
+  font-size: 11px;
+  color: var(--muted);
+}
+.modes button.active .mode-name {
+  color: var(--text);
+}
+.modes button.nuke .mode-icon {
+  color: #fb923c;
 }
 .hint {
   font-size: 12px;
-  color: var(--muted);
+  color: var(--accent);
+}
+.leader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  background: rgba(250, 204, 21, 0.1);
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  font-size: 13px;
+}
+.leader button {
+  margin-left: auto;
+}
+.leader-glyph {
+  font-size: 22px;
+  line-height: 1;
 }
 .ops {
   list-style: none;
   margin: 0;
   padding: 6px 0 0;
   border-top: 1px solid var(--line);
-  max-height: 140px;
+  max-height: 110px;
   overflow: auto;
 }
 .ops li {
@@ -276,69 +373,43 @@ select {
   font-size: 13px;
 }
 
+/* 체스판 */
 .chess {
-  top: 10px;
-  right: 10px;
-  width: 300px;
-  max-height: calc(100vh - 250px);
-  overflow: auto;
+  top: 12px;
+  right: 12px;
+  width: 244px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.threat {
-  color: var(--bad);
+.king-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
   font-weight: 700;
   font-size: 13px;
-  margin-bottom: 8px;
-  animation: blink 1s ease-in-out infinite;
-}
-.rule {
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 7px 9px;
-  margin-bottom: 8px;
-}
-.rule-ready {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
-}
-.rule-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 4px;
-  font-size: 13px;
-}
-.rule-head .muted {
-  font-size: 11px;
-}
-.rule-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-.checks {
-  list-style: none;
-  margin: 0 0 4px;
-  padding: 0;
-  font-size: 12px;
-}
-.checks .ok {
   color: var(--good);
+  background: rgba(74, 222, 128, 0.08);
+  border-color: rgba(74, 222, 128, 0.25);
 }
-.checks .no {
-  color: #cbd5e1;
+.king-line.danger {
+  color: #fff;
+  background: rgba(239, 68, 68, 0.55);
+  border-color: var(--bad);
+  animation: blink 0.9s ease-in-out infinite;
 }
-.checks .no::first-letter {
-  color: var(--bad);
+.king-glyph {
+  font-size: 18px;
+  line-height: 1;
 }
-
 .board {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  border: 2px solid #5b4630;
-  border-radius: 4px;
+  border-radius: 8px;
   overflow: hidden;
-  margin-bottom: 8px;
+  box-shadow: 0 0 0 2px #5b4630;
 }
 .sq {
   position: relative;
@@ -356,9 +427,10 @@ select {
 }
 .sq:hover:not(:disabled) {
   background: #fde68a;
+  border: 0;
 }
 .sq .glyph {
-  font-size: 25px;
+  font-size: 22px;
   line-height: 1;
 }
 .sq.st-busy .glyph {
@@ -371,7 +443,7 @@ select {
   opacity: 1;
 }
 .sq.st-captured .glyph {
-  opacity: 0.18;
+  opacity: 0.15;
 }
 .sq.st-busy::after,
 .sq.st-moving::after {
@@ -379,8 +451,8 @@ select {
   position: absolute;
   right: 3px;
   top: 3px;
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #f59e0b;
 }
@@ -394,17 +466,19 @@ select {
 .sq.king-sq .glyph {
   color: #7c2d12;
 }
+.sq.king-sq.in-danger {
+  background: #fca5a5;
+  animation: blink 0.9s ease-in-out infinite;
+}
 .promo-mark {
   position: absolute;
   left: 3px;
   top: 1px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   color: #7c3aed;
 }
 .piece-card {
-  border-top: 1px solid var(--line);
-  padding-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -417,7 +491,7 @@ select {
 .badge {
   margin-left: auto;
   font-size: 11px;
-  padding: 1px 7px;
+  padding: 1px 8px;
   border-radius: 99px;
   background: #334155;
 }
@@ -433,25 +507,34 @@ select {
 .badge.st-captured {
   background: #7f1d1d;
 }
+.rule-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
 
+/* 사건 알림 */
 .eventlog {
-  bottom: 10px;
-  right: 10px;
-  width: 360px;
-  max-height: 220px;
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 1.5;
+  bottom: 12px;
+  right: 12px;
+  width: 330px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  align-items: flex-end;
+  gap: 4px;
+  pointer-events: none;
 }
-.eventlog:empty {
-  display: none;
-}
-.ev-time {
-  color: #64748b;
-  font-variant-numeric: tabular-nums;
+.ev {
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+  transition: opacity 0.3s;
 }
 .ev-big {
   color: var(--accent);
@@ -464,34 +547,164 @@ select {
   color: var(--chess);
 }
 
-.promotion {
+/* 체스 사건 연출 */
+.chess-banner {
+  top: 120px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 10px;
-  padding: 8px 10px;
-  border: 1px solid #a78bfa;
-  border-radius: 9px;
-  background: rgba(76, 29, 149, 0.35);
-  animation: glow-purple 1.2s ease-in-out infinite;
-}
-.promo-glyphs {
-  font-size: 30px;
-  display: flex;
-  gap: 10px;
   align-items: center;
+  padding: 18px 40px 16px;
+  border-radius: 22px;
+  background: rgba(9, 14, 26, 0.82);
+  border: 2px solid var(--chess);
+  box-shadow: 0 0 60px rgba(167, 139, 250, 0.45);
+  pointer-events: none;
+  animation: banner 1.8s ease-out both;
+}
+.banner-glyph {
+  font-size: 64px;
+  line-height: 1;
+}
+.banner-title {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  margin-top: 4px;
+}
+.banner-sub {
+  font-size: 15px;
+  color: var(--muted);
+}
+.chess-banner.tone-danger {
+  border-color: var(--bad);
+  box-shadow: 0 0 60px rgba(239, 68, 68, 0.5);
+}
+.chess-banner.tone-danger .banner-title {
+  color: var(--bad);
+}
+.chess-banner.tone-good {
+  border-color: var(--good);
+  box-shadow: 0 0 60px rgba(74, 222, 128, 0.4);
+}
+.chess-banner.tone-good .banner-title {
+  color: var(--good);
+}
+.chess-banner.tone-chess .banner-title {
+  color: var(--chess);
+}
+.chess-banner.small {
+  top: 74px;
+  flex-direction: row;
+  gap: 10px;
+  padding: 6px 16px;
+  border-width: 1px;
+  border-color: var(--line-strong);
+  box-shadow: none;
+  animation: banner-small 1.45s ease-out both;
+}
+.chess-banner.small .banner-glyph {
+  font-size: 22px;
+}
+.chess-banner.small .banner-title {
+  font-size: 14px;
+  margin: 0;
+}
+.chess-banner.small .banner-sub {
+  font-size: 12px;
 }
 
-.ep-alert {
+/* 체크 */
+.check-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  box-shadow: inset 0 0 140px 40px rgba(239, 68, 68, 0.55);
+  animation: blink 0.9s ease-in-out infinite;
+}
+.check-timer {
   top: 66px;
   left: 50%;
   transform: translateX(-50%);
-  background: #b45309;
-  border-color: var(--accent);
-  font-weight: 800;
+  padding: 7px 18px;
+  border-radius: 999px;
+  background: rgba(127, 29, 29, 0.92);
+  border: 1px solid var(--bad);
+  font-weight: 700;
   font-size: 15px;
-  padding: 10px 16px;
-  animation: glow 0.9s ease-in-out infinite;
+  white-space: nowrap;
+}
+.check-timer b {
+  font-size: 22px;
+  margin: 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 상황별 체스 버튼 */
+.action-dock {
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px 10px 14px;
+  border-radius: 16px;
+  text-align: left;
+  font-size: 15px;
+  animation: rise 0.25s ease-out, glow 1s ease-in-out infinite;
+}
+.action b {
+  display: block;
+  font-size: 18px;
+}
+.action small {
+  display: block;
+  font-size: 12px;
+  opacity: 0.85;
+}
+.action-glyph {
+  font-size: 36px;
+  line-height: 1;
+}
+.action.castle {
+  background: #4c1d95;
+  border-color: var(--chess);
+  --glow: #a78bfa;
+}
+.action.castle:hover:not(:disabled) {
+  background: #5b21b6;
+}
+.action.enpassant {
+  background: #92400e;
+  border-color: var(--accent);
+  --glow: var(--accent);
+}
+.action.enpassant:hover:not(:disabled) {
+  background: #b45309;
+}
+.action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  text-align: center;
+  padding: 14px 18px;
+  border-color: var(--chess);
+  animation: rise 0.25s ease-out;
+}
+.promo-glyphs {
+  font-size: 36px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .spawn-banner {
@@ -499,7 +712,8 @@ select {
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
-  width: min(520px, calc(100vw - 32px));
+  padding: 10px 22px;
+  border-radius: 999px;
 }
 
 .paused {
@@ -508,20 +722,21 @@ select {
   transform: translate(-50%, -50%);
   background: rgba(0, 0, 0, 0.6);
   padding: 10px 18px;
-  border-radius: 10px;
+  border-radius: 12px;
   pointer-events: none;
 }
 
 .toast {
-  bottom: 24px;
+  bottom: 110px;
   left: 50%;
   transform: translateX(-50%);
   background: #14532d;
   border: 1px solid var(--good);
-  border-radius: 9px;
-  padding: 8px 14px;
+  border-radius: 999px;
+  padding: 7px 16px;
   pointer-events: none;
   animation: rise 0.2s ease-out;
+  z-index: 3;
 }
 .toast.bad {
   background: #7f1d1d;
@@ -534,15 +749,20 @@ select {
   z-index: 5;
   display: grid;
   place-items: center;
-  background: rgba(2, 6, 23, 0.55);
+  background: rgba(2, 6, 23, 0.6);
 }
 .result {
   text-align: center;
   min-width: 320px;
+  padding: 24px 28px;
+}
+.result-glyph {
+  font-size: 56px;
+  line-height: 1;
 }
 .result h1 {
-  margin: 4px 0;
-  font-size: 34px;
+  margin: 6px 0;
+  font-size: 32px;
 }
 .result .rule-actions {
   justify-content: center;
@@ -550,23 +770,50 @@ select {
 
 @keyframes blink {
   50% {
-    opacity: 0.55;
+    opacity: 0.5;
   }
 }
 @keyframes glow {
   50% {
-    box-shadow: 0 0 18px var(--accent);
-  }
-}
-@keyframes glow-purple {
-  50% {
-    box-shadow: 0 0 14px #a78bfa;
+    box-shadow: 0 0 22px var(--glow, var(--accent));
   }
 }
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translate(-50%, 8px);
+    translate: 0 10px;
+  }
+}
+@keyframes banner {
+  0% {
+    opacity: 0;
+    scale: 0.7;
+  }
+  12% {
+    opacity: 1;
+    scale: 1.06;
+  }
+  20% {
+    scale: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 1;
+  }
+}
+@keyframes banner-small {
+  0% {
+    opacity: 0;
+  }
+  15%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
   }
 }
 
@@ -574,41 +821,53 @@ select {
   .leaderboard {
     display: none;
   }
-  .topbar {
-    left: 10px;
-    transform: none;
-    gap: 10px;
-  }
 }
 @media (max-width: 760px) {
   .topbar {
-    right: 10px;
-    flex-wrap: wrap;
-    white-space: normal;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    gap: 10px;
+    justify-content: space-between;
   }
-  .chess,
+  .bar {
+    display: none;
+  }
+  .chess {
+    top: auto;
+    bottom: 12px;
+    width: 180px;
+  }
+  .chess .piece-card,
+  .chess > .small-text,
   .eventlog {
     display: none;
   }
   .controls {
-    right: 10px;
-    width: auto;
+    width: calc(100vw - 216px);
+  }
+  .action-dock {
+    bottom: 200px;
   }
 }
 
 /* ───────── 로비 ───────── */
 
 .lobby {
-  max-width: 960px;
+  max-width: 920px;
   margin: 0 auto;
-  padding: 32px 16px 64px;
+  padding: 48px 16px 64px;
   display: grid;
   gap: 18px;
 }
+.lobby header {
+  text-align: center;
+}
 .lobby header h1 {
   margin: 0;
-  font-size: 40px;
-  letter-spacing: -0.5px;
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: -1px;
 }
 .lobby header p {
   margin: 6px 0 0;
@@ -616,26 +875,67 @@ select {
 .logo-glyph {
   color: var(--accent);
 }
+.intro {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.intro .panel {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.intro-glyph {
+  font-size: 34px;
+  line-height: 1;
+  color: var(--accent);
+}
+.intro b {
+  display: block;
+  margin-bottom: 2px;
+}
 .lobby-form {
   display: grid;
-  grid-template-columns: repeat(4, 1fr) auto;
+  grid-template-columns: 1fr 1.3fr 1fr 0.8fr 1fr auto;
   gap: 14px;
   align-items: end;
+  padding: 16px;
 }
 .lobby-form label {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
 }
 .lobby-form label b {
   color: var(--text);
 }
+.lobby-form input,
+.lobby-form select {
+  height: 36px;
+}
 .lobby-form input[type='range'] {
-  padding: 0;
-  height: 34px;
-  accent-color: var(--accent);
+  height: 36px;
+}
+.segmented {
+  display: flex;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.segmented button {
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 0 6px;
+}
+.segmented button.active {
+  background: rgba(250, 204, 21, 0.2);
+  color: var(--accent);
+  font-weight: 700;
 }
 .seed {
   display: flex;
@@ -647,19 +947,26 @@ select {
 }
 button.big {
   font-size: 17px;
-  padding: 9px 26px;
+  height: 44px;
+  padding: 0 28px;
+  border-radius: 12px;
+}
+.rules summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--muted);
+}
+.rules[open] summary {
+  margin-bottom: 10px;
 }
 .rules h2 {
-  font-size: 16px;
+  font-size: 15px;
   margin: 14px 0 6px;
   color: var(--accent);
 }
-.rules h2:first-child {
-  margin-top: 0;
-}
 .rules p,
 .rules li {
-  line-height: 1.6;
+  line-height: 1.65;
 }
 .rules ul {
   margin: 0;
@@ -683,9 +990,12 @@ button.big {
 .piece-table .num {
   white-space: nowrap;
 }
-@media (max-width: 760px) {
+@media (max-width: 860px) {
   .lobby-form {
     grid-template-columns: 1fr 1fr;
+  }
+  .intro {
+    grid-template-columns: 1fr;
   }
   .piece-table .num {
     display: none;

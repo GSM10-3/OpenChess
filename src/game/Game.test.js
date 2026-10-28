@@ -49,6 +49,20 @@ describe('지도', () => {
   });
 });
 
+describe('지도 크기', () => {
+  test('size 옵션대로 지도가 만들어지고, 큰 지도도 봇 판이 오류 없이 돈다', () => {
+    const small = new Game({ seed: 5, bots: 2, human: false });
+    expect([small.W, small.H]).toEqual([C.MAP_SIZES.small.width, C.MAP_SIZES.small.height]);
+    const game = new Game({ seed: 5, bots: C.MAP_SIZES.large.bots, size: 'large', human: false });
+    expect([game.W, game.H]).toEqual([C.MAP_SIZES.large.width, C.MAP_SIZES.large.height]);
+    const spawned = game.players.filter((p) => p && p.spawned);
+    expect(spawned).toHaveLength(C.MAP_SIZES.large.bots);
+    expect(new Set(spawned.map((p) => p.color)).size).toBe(spawned.length); // 색이 겹치지 않는다
+    run(game, 2000);
+    for (const p of game.players.filter((q) => q && q.alive)) expect(game.owner[p.king]).toBe(p.id);
+  });
+});
+
 describe('시작 배치', () => {
   test('킹과 체스 첫 줄 · 폰 여덟이 내 땅에 선다', () => {
     const { game, add, at } = setup();
@@ -83,6 +97,7 @@ describe('킹', () => {
     expect(game.players[b].deathCause).toBe('conquest');
     expect(game.players[b].tiles).toBe(0);
     expect(game.players[b].generals.every((g) => g.status === 'captured')).toBe(true);
+    expect(game.events.find((e) => e.tag === 'checkmate')).toMatchObject({ involved: [b, a] });
     expect(game.owner[at(26, 24)]).toBe(a); // 킹 곁은 넘어오고
     expect(game.owner[at(55, 20)]).toBe(0); // 먼 땅은 무주지
     expect(game.players[a].gold).toBeGreaterThanOrEqual(10000 * C.HEIR_GOLD_SHARE);
@@ -116,6 +131,7 @@ describe('킹', () => {
     expect(kingThreat(game, a)).toEqual({ kind: 'check', by: b });
     expect(castleOptions(game, a).available).toBe(true);
     expect(game.events.some((e) => e.text.includes('체크!'))).toBe(true);
+    expect(game.events.find((e) => e.tag === 'check')).toMatchObject({ involved: [a, b] }); // 화면 연출용 태그
 
     // 캐슬링을 쓴 뒤에도 새 궁성의 체크는 위협으로 보인다
     expect(game.castle(a).ok).toBe(true);

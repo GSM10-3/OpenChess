@@ -2,6 +2,14 @@
 
 export const TICK_MS = 100; // 1초에 10틱
 
+// 지도 크기 (로비에서 고른다). bots: 그 크기의 기본 봇 수
+export const MAP_SIZES = {
+  small: { label: '작음', width: 200, height: 130, bots: 7 },
+  normal: { label: '보통', width: 300, height: 190, bots: 11 },
+  large: { label: '큼', width: 400, height: 250, bots: 15 },
+};
+export const MAX_BOTS = 15;
+
 // 지형
 export const WATER = 0;
 export const PLAINS = 1;

@@ -8,6 +8,7 @@ import { castleOptions, evaluatePocket } from './chess';
 const COLORS = [
   '#3b82f6', '#ef4444', '#22c55e', '#eab308', '#a855f7',
   '#f97316', '#14b8a6', '#ec4899', '#84cc16', '#64748b',
+  '#06b6d4', '#d946ef', '#f43f5e', '#8b5cf6', '#10b981', '#b45309',
 ];
 
 const ok = (msg = '', extra = {}) => ({ ok: true, msg, ...extra });
@@ -28,10 +29,11 @@ function buildNeighbors(W, H) {
 }
 
 export class Game {
-  constructor({ seed = 1, bots = 7, difficulty = 'normal', map = null, human = true, humanName = '나' } = {}) {
+  constructor({ seed = 1, bots = 7, difficulty = 'normal', map = null, size = 'small', human = true, humanName = '나' } = {}) {
     this.seed = seed;
     this.rng = mulberry32(seed);
-    const m = map ? analyzeMap(map.width, map.height, map.terrain) : generateMap({ seed });
+    const dims = C.MAP_SIZES[size] || C.MAP_SIZES.small;
+    const m = map ? analyzeMap(map.width, map.height, map.terrain) : generateMap({ seed, width: dims.width, height: dims.height });
     this.W = m.width;
     this.H = m.height;
     this.N = this.W * this.H;
@@ -112,8 +114,9 @@ export class Game {
     return d;
   }
 
-  log(text, kind = 'info', involved = []) {
-    this.events.push({ id: this.nextId++, tick: this.tick, text, kind, involved: involved.filter(Boolean) });
+  // tag: 화면 연출용 체스 사건 종류 (check · castle · promotion · enpassant · checkmate · capture)
+  log(text, kind = 'info', involved = [], tag = null, data = null) {
+    this.events.push({ id: this.nextId++, tick: this.tick, text, kind, involved: involved.filter(Boolean), tag, data });
     if (this.events.length > 200) this.events.splice(0, this.events.length - 200);
   }
 
@@ -152,7 +155,8 @@ export class Game {
 
   pickSpawnTile() {
     const kings = this.players.filter((p) => p && p.spawned).map((p) => p.king);
-    for (let minD = 30; minD >= 6; minD -= 4) {
+    // 지도가 클수록 서로 멀리 떨어뜨린다 (작은 지도 200칸 너비에서 30칸)
+    for (let minD = Math.round((30 * this.W) / 200); minD >= 6; minD -= 4) {
       for (let tries = 0; tries < 500; tries++) {
         const t = Math.floor(this.rng() * this.N);
         if (!this.isLand(t) || this.owner[t]) continue;
@@ -270,9 +274,9 @@ export class Game {
     v.deathCause = cause;
     const k = killerId ? this.players[killerId] : null;
     if (cause === 'nuke') {
-      this.log(`☢ ${v.name}의 킹이 피폭되었습니다 — ${josa(v.name, '이/가')} 무너졌습니다`, 'big');
+      this.log(`☢ ${v.name}의 킹이 피폭되었습니다 — ${josa(v.name, '이/가')} 무너졌습니다`, 'big', [vid, killerId], 'checkmate', { nuke: true });
     } else {
-      this.log(`♚ 체크메이트! ${josa(k.name, '이/가')} ${v.name}의 킹을 잡았습니다`, 'big');
+      this.log(`♚ 체크메이트! ${josa(k.name, '이/가')} ${v.name}의 킹을 잡았습니다`, 'big', [vid, killerId], 'checkmate');
     }
     for (const g of v.generals) {
       if (g.status === 'captured') continue;
@@ -337,7 +341,9 @@ export class Game {
     this.log(
       `${PIECES[g.type].glyph} ${owner.name}의 ${josa(pieceLabel(g), '이/가')} ${who}에게 잡혔습니다`,
       'chess',
-      [g.owner, captorPlayer]
+      [g.owner, captorPlayer],
+      'capture',
+      { type: g.type }
     );
     if (captorGeneral) this.offerPromotion(captorGeneral, g.type);
   }
@@ -379,7 +385,7 @@ export class Game {
     g.type = type;
     g.promoted = true;
     const p = this.players[g.owner];
-    this.log(`${PIECES[type].glyph} 프로모션! ${p.name}의 폰(${g.file})이 ${josa(PIECES[type].name, '이/가')} 되었습니다`, 'chess', [p.id]);
+    this.log(`${PIECES[type].glyph} 프로모션! ${p.name}의 폰(${g.file})이 ${josa(PIECES[type].name, '이/가')} 되었습니다`, 'chess', [p.id], 'promotion', { type });
   }
 
   moveGeneral(pid, gid, tile) {
@@ -997,7 +1003,7 @@ export class Game {
     p.king = rook.tile;
     this.station(rook, kingTile);
     p.castled = true;
-    this.log(`♜ 캐슬링! ${p.name}의 킹이 ${josa(pieceLabel(rook), '과/와')} 자리를 바꿨습니다`, 'chess', [pid]);
+    this.log(`♜ 캐슬링! ${p.name}의 킹이 ${josa(pieceLabel(rook), '과/와')} 자리를 바꿨습니다`, 'chess', [pid], 'castle');
     return ok('캐슬링 완료');
   }
 
@@ -1022,7 +1028,8 @@ export class Game {
     this.log(
       `♟ 앙파상! ${p.name}의 ${josa(pieceLabel(pawn), '이/가')} ${att.name}의 돌파 부대를 역포위 — ${ev.pocket.size}칸 탈환, 병력 ${fmt(lostTroops)} 섬멸`,
       'chess',
-      [pid, a.attacker]
+      [pid, a.attacker],
+      'enpassant'
     );
     if (a.general) this.captureGeneral(a.general, pid, pawn);
     const c = Math.round(sy / ev.pocket.size) * this.W + Math.round(sx / ev.pocket.size);
@@ -1050,7 +1057,7 @@ export class Game {
       if (by && !p.check) {
         p.checkSince = this.tick;
         p.bot.nextThink = Math.min(p.bot.nextThink, this.tick + 5); // 봇도 곧바로 대응한다
-        this.log(`♚ 체크! ${josa(this.players[by].name, '이/가')} ${p.name}의 궁성에 들어왔습니다`, 'chess', [p.id, by]);
+        this.log(`♚ 체크! ${josa(this.players[by].name, '이/가')} ${p.name}의 궁성에 들어왔습니다`, 'chess', [p.id, by], 'check');
       }
       p.check = by;
     }

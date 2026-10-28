@@ -1,88 +1,92 @@
+import { useState } from 'react';
 import * as C from '../game/constants';
 import { PIECES, pieceLabel } from '../game/pieces';
 import { fmt } from '../game/Game';
 
-const clock = (tick) => {
+export const clock = (tick) => {
   const s = Math.floor(tick / 10);
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
 
+// 꼭 필요한 숫자만: 병력(막대) · 금 · 시간(또는 평화 기간)
 export function TopBar({ game, paused, speed, onPause, onSpeed, onExit }) {
   const p = game.human;
   const max = C.maxTroops(p.tiles);
   const regen = C.troopRegen(p.troops, max) * 10;
-  const share = (p.tiles / game.landCount) * 100;
+  const fill = Math.min(1, p.troops / max);
+  const peace = game.peaceLeft();
   return (
     <div className="panel topbar">
-      <div className="stat">
-        <span className="stat-label">병력</span>
+      <div className="stat" title={`병력 ${fmt(p.troops)} / ${fmt(max)} · 초당 +${fmt(regen)}`}>
+        <span className="stat-icon">⚔</span>
         <b>{fmt(p.troops)}</b>
-        <span className="muted">/ {fmt(max)}</span>
-        <span className="gain">+{fmt(regen)}/s</span>
+        <span className="bar">
+          <span style={{ width: `${fill * 100}%` }} />
+        </span>
       </div>
-      <div className="stat">
-        <span className="stat-label">금</span>
+      <div className="stat" title={`초당 +${fmt(C.goldIncome(p.tiles) * 10)}`}>
+        <span className="stat-icon gold">●</span>
         <b className="gold">{fmt(p.gold)}</b>
-        <span className="gain">+{fmt(C.goldIncome(p.tiles) * 10)}/s</span>
       </div>
-      <div className="stat">
-        <span className="stat-label">영토</span>
-        <b>{share.toFixed(1)}%</b>
-      </div>
-      <div className="stat">
-        <span className="stat-label">시간</span>
-        <b>{clock(game.tick)}</b>
-      </div>
-      {game.peaceLeft() > 0 && (
-        <div className="stat" title="이 시간 동안은 무주지만 넓힐 수 있습니다">
-          <span className="stat-label">평화</span>
-          <b className="safe">{Math.ceil(game.peaceLeft() / 10)}초</b>
+      {peace > 0 ? (
+        <div className="stat peace" title="평화 기간: 무주지만 넓힐 수 있습니다">
+          <span className="stat-icon">🕊</span>
+          <b>평화 {Math.ceil(peace / 10)}초</b>
+        </div>
+      ) : (
+        <div className="stat muted">
+          <b>{clock(game.tick)}</b>
         </div>
       )}
       <div className="topbar-buttons">
-        <button onClick={onPause} title="Space">{paused ? '▶ 계속' : '⏸ 멈춤'}</button>
-        <button onClick={onSpeed} title="게임 속도">×{speed}</button>
-        <button onClick={onExit}>나가기</button>
+        <button className="icon" onClick={onPause} title="일시정지 (Space)">
+          {paused ? '▶' : '⏸'}
+        </button>
+        <button className="icon" onClick={onSpeed} title="게임 속도">
+          ×{speed}
+        </button>
+        <button className="icon" onClick={onExit} title="나가기">
+          ✕
+        </button>
       </div>
     </div>
   );
 }
 
+// 상위 다섯 나라와 나만. 접을 수 있다
 export function Leaderboard({ game }) {
-  const rows = game.players
-    .filter((p) => p && p.spawned)
-    .sort((a, b) => b.alive - a.alive || b.tiles - a.tiles)
-    .slice(0, 10);
+  const [open, setOpen] = useState(true);
+  const all = game.players.filter((p) => p && p.spawned && p.alive).sort((a, b) => b.tiles - a.tiles);
+  const rows = all.slice(0, 5);
+  const meRank = all.findIndex((p) => p.isHuman);
+  if (meRank >= 5) rows.push(all[meRank]);
   return (
     <div className="panel leaderboard">
-      <div className="panel-title">순위</div>
-      <table>
-        <tbody>
-          {rows.map((p, i) => (
-            <tr key={p.id} className={`${p.isHuman ? 'me' : ''} ${p.alive ? '' : 'dead'}`}>
-              <td className="rank">{p.alive ? i + 1 : '–'}</td>
-              <td>
-                <span className="dot" style={{ background: p.color }} />
-                {p.name}
-              </td>
-              <td className="num">{p.alive ? `${((p.tiles / game.landCount) * 100).toFixed(1)}%` : ''}</td>
-              <td className="num">{p.alive ? fmt(p.troops) : ''}</td>
-              <td className="king-state" title={p.alive ? '킹 생존' : p.deathCause === 'nuke' ? '피폭' : '체크메이트'}>
-                {p.alive ? PIECES.king.glyph : p.deathCause === 'nuke' ? '☢' : '✝'}
-              </td>
-            </tr>
+      <button className="panel-title flat" onClick={() => setOpen((v) => !v)}>
+        순위 <span className="muted">{all.length}개국</span>
+        <span className="right muted">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <ol>
+          {rows.map((p) => (
+            <li key={p.id} className={p.isHuman ? 'me' : ''}>
+              <span className="rank">{all.indexOf(p) + 1}</span>
+              <span className="dot" style={{ background: p.color }} />
+              <span className="name">{p.name}</span>
+              <span className="num">{((p.tiles / game.landCount) * 100).toFixed(1)}%</span>
+            </li>
           ))}
-        </tbody>
-      </table>
+        </ol>
+      )}
     </div>
   );
 }
 
 const MODES = [
-  { key: 'attack', label: '⚔ 공격', hint: '적 땅이나 무주지를 클릭하세요. 맞닿지 않은 곳은 배로 갑니다.' },
-  { key: 'boat', label: '⛵ 상륙', hint: '건너편 해안을 클릭하면 배를 띄웁니다.' },
-  { key: 'atom', label: `☢ 원자 ${fmt(C.NUKES.atom.cost)}`, hint: `반경 ${C.NUKES.atom.radius}칸. 킹이 맞으면 그 나라는 패배합니다.` },
-  { key: 'hydrogen', label: `☢ 수소 ${fmt(C.NUKES.hydrogen.cost)}`, hint: `반경 ${C.NUKES.hydrogen.radius}칸. 킹이 맞으면 그 나라는 패배합니다.` },
+  { key: 'attack', label: '⚔', name: '공격', hint: '적 땅이나 무주지를 클릭' },
+  { key: 'boat', label: '⛵', name: '상륙', hint: '건너편 해안을 클릭 (B)' },
+  { key: 'atom', label: '☢', name: '원자', hint: `원자폭탄 · 금 ${fmt(C.NUKES.atom.cost)} · 반경 ${C.NUKES.atom.radius}칸` },
+  { key: 'hydrogen', label: '☢', name: '수소', hint: `수소폭탄 · 금 ${fmt(C.NUKES.hydrogen.cost)} · 반경 ${C.NUKES.hydrogen.radius}칸` },
 ];
 
 export function ControlPanel({ game, ratio, setRatio, mode, setMode, general, clearGeneral, onRetreat, onFocus }) {
@@ -90,62 +94,54 @@ export function ControlPanel({ game, ratio, setRatio, mode, setMode, general, cl
   const spec = general ? PIECES[general.type] : null;
   const sending = Math.floor(p.troops * ratio);
   const nukeLocked = game.tick < C.NUKE_UNLOCK_TICK;
-  const hint = mode === 'move' ? '장군을 옮길 내 땅을 클릭하세요. (Esc 취소)' : MODES.find((m) => m.key === mode)?.hint;
   const attacks = game.attacks.filter((a) => a.attacker === p.id);
   const boats = game.boats.filter((b) => b.owner === p.id);
   return (
     <div className="panel controls">
-      <label className="ratio">
-        <span>
-          공격 병력 <b>{Math.round(ratio * 100)}%</b>
-          <span className="muted"> · {fmt(spec?.troopLoss ? sending * (1 - spec.troopLoss) : sending)}명</span>
-        </span>
+      <label className="ratio" title="공격에 보낼 병력 비율">
         <input type="range" min="1" max="100" value={Math.round(ratio * 100)} onChange={(e) => setRatio(e.target.value / 100)} />
+        <span className="ratio-value">
+          <b>{Math.round(ratio * 100)}%</b>
+          <span className="muted">{fmt(spec?.troopLoss ? sending * (1 - spec.troopLoss) : sending)}</span>
+        </span>
       </label>
-      <div className="leader">
-        {general ? (
-          <>
-            <span className="leader-glyph">{spec.glyph}</span>
-            <span>
-              <b>{pieceLabel(general)}</b> 지휘 · 금 {fmt(spec.cost)}
-              <span className="muted">
-                {' '}
-                {spec.land && spec.sea ? '육·해' : spec.land ? '육지만' : '바다만'}
-              </span>
-            </span>
-            <button className="small" onClick={clearGeneral}>
-              ✕
-            </button>
-          </>
-        ) : (
-          <span className="muted">장군 없이 출격 (오른쪽 체스판에서 장군 선택)</span>
-        )}
-      </div>
       <div className="modes">
         {MODES.map((m) => {
           const nuke = !!C.NUKES[m.key];
           const disabled = nuke && (nukeLocked || p.gold < C.NUKES[m.key].cost);
+          const title = nuke && nukeLocked ? `${m.hint} — ${Math.ceil((C.NUKE_UNLOCK_TICK - game.tick) / 10)}초 뒤 사용 가능` : m.hint;
           return (
             <button
               key={m.key}
-              className={mode === m.key ? 'active' : ''}
+              className={`${mode === m.key ? 'active' : ''} ${nuke ? 'nuke' : ''}`}
               disabled={disabled}
-              title={nuke && nukeLocked ? `${Math.ceil((C.NUKE_UNLOCK_TICK - game.tick) / 10)}초 뒤 사용 가능` : m.hint}
+              title={title}
               onClick={() => setMode(mode === m.key ? 'attack' : m.key)}
             >
-              {m.label}
+              <span className="mode-icon">{m.label}</span>
+              <span className="mode-name">{m.name}</span>
             </button>
           );
         })}
       </div>
-      <div className="hint">{hint}</div>
+      {mode === 'move' && <div className="hint">장군을 옮길 내 땅을 클릭하세요 · Esc 취소</div>}
+      {general && (
+        <div className="leader">
+          <span className="leader-glyph">{spec.glyph}</span>
+          <span>
+            <b>{pieceLabel(general)}</b> <span className="muted">지휘 · 금 {fmt(spec.cost)}</span>
+          </span>
+          <button className="small" onClick={clearGeneral} title="장군 선택 해제">
+            ✕
+          </button>
+        </div>
+      )}
       {(attacks.length > 0 || boats.length > 0) && (
         <ul className="ops">
           {attacks.map((a) => (
             <li key={a.id}>
               <span>
                 {a.general ? PIECES[a.general.type].glyph : '⚔'} {a.target ? game.players[a.target].name : '무주지'}
-                {a.kind === 'landing' ? ' (상륙)' : a.kind === 'knight' ? ' (돌파)' : ''}
               </span>
               <span className="num">{fmt(a.troops)}</span>
               <button className="small" onClick={() => onRetreat(a.id)} title={`남은 병력의 ${C.RETREAT_KEEP * 100}%만 돌아옵니다`}>
@@ -156,7 +152,7 @@ export function ControlPanel({ game, ratio, setRatio, mode, setMode, general, cl
           {boats.map((b) => (
             <li key={b.id}>
               <span>
-                {b.general ? PIECES[b.general.type].glyph : '⛵'} 항해 중 → {game.owner[b.landing] ? game.players[game.owner[b.landing]].name : '무주지'}
+                {b.general ? PIECES[b.general.type].glyph : '⛵'} → {game.owner[b.landing] ? game.players[game.owner[b.landing]].name : '무주지'}
               </span>
               <span className="num">{fmt(b.troops)}</span>
               <button className="small" onClick={() => onFocus(b.tile)}>
@@ -170,16 +166,22 @@ export function ControlPanel({ game, ratio, setRatio, mode, setMode, general, cl
   );
 }
 
-const KIND_CLASS = { big: 'ev-big', nuke: 'ev-nuke', chess: 'ev-chess', info: '' };
+const FEED_TICKS = 80; // 8초 지나면 사라진다
 
+// 나와 관련된 체스 사건과 체크메이트 · 핵만, 최근 네 개
 export function EventLog({ game }) {
   const hid = game.humanId;
-  const events = game.events.filter((e) => e.kind === 'big' || e.kind === 'nuke' || e.involved.includes(hid)).slice(-9);
+  const events = game.events
+    .filter((e) => game.tick - e.tick < FEED_TICKS)
+    .filter((e) => e.kind === 'big' || e.kind === 'nuke' || (e.kind === 'chess' && e.involved.includes(hid)))
+    .filter((e) => !(e.tag === 'capture' && e.data?.type === 'pawn')) // 폰 잡힘은 너무 잦아서 뺀다
+    .slice(-3);
+  if (!events.length) return null;
   return (
-    <div className="panel eventlog">
+    <div className="eventlog">
       {events.map((e) => (
-        <div key={e.id} className={KIND_CLASS[e.kind]}>
-          <span className="ev-time">{clock(e.tick)}</span> {e.text}
+        <div key={e.id} className={`ev ev-${e.kind}`} style={{ opacity: Math.min(1, (FEED_TICKS - (game.tick - e.tick)) / 20) }}>
+          {e.text}
         </div>
       ))}
     </div>

@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Game } from '../game/Game';
 import * as C from '../game/constants';
-import { PIECES } from '../game/pieces';
+import { PIECES, pieceLabel, josa } from '../game/pieces';
 import { castleOptions, enPassantOptions } from '../game/chess';
 import MapView, { focusTile } from './MapView';
 import { TopBar, Leaderboard, ControlPanel, EventLog } from './Hud';
-import ChessPanel from './ChessPanel';
+import ChessPanel, { PromotionDialog } from './ChessPanel';
+import ChessBanner from './ChessBanner';
 
 const SPEEDS = [1, 2, 3];
 
 export default function GameScreen({ config, onExit, onRestart }) {
   const gameRef = useRef(null);
   if (!gameRef.current) {
-    gameRef.current = new Game({ seed: config.seed, bots: config.bots, difficulty: config.difficulty, humanName: config.name });
+    gameRef.current = new Game({ seed: config.seed, bots: config.bots, size: config.size, difficulty: config.difficulty, humanName: config.name });
   }
   const game = gameRef.current;
   const human = game.human;
@@ -121,17 +122,17 @@ export default function GameScreen({ config, onExit, onRestart }) {
   }, []);
 
   const offer = human.offers[0];
+  const checkLeft = playing && human.check ? Math.max(0, Math.ceil((C.CHECKMATE_TICKS - (game.tick - human.checkSince)) / 10)) : 0;
 
   return (
     <div className={`game mode-${mode}`}>
       <MapView game={game} camRef={camRef} uiRef={uiRef} onTileClick={handleTileClick} onCancel={cancel} />
+      {playing && human.check > 0 && <div className="check-vignette" />}
 
       {game.phase === 'spawn' ? (
         <div className="panel spawn-banner">
-          <b>시작할 위치를 고르세요</b>
-          <div className="small-text">
-            클릭한 칸에 {PIECES.king.glyph} 킹이 놓입니다. 킹은 움직일 수 없고, 그 칸을 빼앗기거나 핵에 맞으면 패배합니다.
-          </div>
+          <b>시작할 위치를 클릭하세요</b>
+          <div className="small-text muted">그 자리에 {PIECES.king.glyph} 킹이 놓입니다 · 킹을 잃으면 패배</div>
         </div>
       ) : (
         <>
@@ -143,6 +144,11 @@ export default function GameScreen({ config, onExit, onRestart }) {
             onSpeed={() => setSpeed((s) => SPEEDS[(SPEEDS.indexOf(s) + 1) % SPEEDS.length])}
             onExit={onExit}
           />
+          {playing && human.check > 0 && (
+            <div className="check-timer">
+              {PIECES.king.glyph} 체크 — 체크메이트까지 <b>{checkLeft}</b>초
+            </div>
+          )}
           <Leaderboard game={game} />
           <ControlPanel
             game={game}
@@ -158,10 +164,7 @@ export default function GameScreen({ config, onExit, onRestart }) {
           <ChessPanel
             game={game}
             generalId={generalId}
-            castle={castle}
-            ep={ep}
-            offer={offer}
-            onResolve={(gid, yes) => show(game.resolvePromotion(human.id, gid, yes))}
+            threat={castle.threat}
             onSelect={(id) => {
               setGeneralId(id);
               if (mode === 'move') setMode('attack');
@@ -171,19 +174,37 @@ export default function GameScreen({ config, onExit, onRestart }) {
               setGeneralId(id);
               setMode('move');
             }}
-            onCastle={(rookId) => show(game.castle(human.id, rookId))}
-            onEnPassant={(attackId) => show(game.enPassant(human.id, attackId))}
           />
           <EventLog game={game} />
-          {epReady && (
-            <button className="ep-alert" onClick={() => show(game.enPassant(human.id, epReady.attackId))}>
-              {PIECES.pawn.glyph} 앙파상 가능! {game.players[epReady.attacker].name}의 돌파 부대를 역포위
-            </button>
-          )}
+          <ChessBanner game={game} />
+
+          {/* 체스 규칙은 쓸 수 있을 때만 화면 가운데 아래에 큰 버튼으로 뜬다 */}
+          <div className="action-dock">
+            {offer && <PromotionDialog game={game} offer={offer} onResolve={(gid, yes) => show(game.resolvePromotion(human.id, gid, yes))} />}
+            {castle.available &&
+              castle.rooks.map((r) => (
+                <button key={r.id} className="action castle" onClick={() => show(game.castle(human.id, r.id))}>
+                  <span className="action-glyph">{PIECES.rook.glyph}</span>
+                  <span>
+                    <b>캐슬링</b>
+                    <small>킹 ↔ {josa(pieceLabel(r), '과/와')} 자리 바꾸기</small>
+                  </span>
+                </button>
+              ))}
+            {epReady && (
+              <button className="action enpassant" onClick={() => show(game.enPassant(human.id, epReady.attackId))}>
+                <span className="action-glyph">{PIECES.pawn.glyph}</span>
+                <span>
+                  <b>앙파상</b>
+                  <small>{game.players[epReady.attacker].name}의 돌파 부대를 역포위</small>
+                </span>
+              </button>
+            )}
+          </div>
         </>
       )}
 
-      {paused && game.phase === 'play' && <div className="paused">일시정지 — Space 로 계속</div>}
+      {paused && game.phase === 'play' && <div className="paused">일시정지 — Space로 계속</div>}
 
       {toast && (
         <div key={toast.key} className={`toast ${toast.ok ? '' : 'bad'}`}>
@@ -194,13 +215,14 @@ export default function GameScreen({ config, onExit, onRestart }) {
       {game.phase === 'over' && (
         <div className="overlay">
           <div className="panel result">
-            <h1>{game.result === 'win' ? '승리!' : '패배'}</h1>
-            <p>
+            <div className="result-glyph">{game.result === 'win' ? PIECES.king.glyph : '✝'}</div>
+            <h1>{game.result === 'win' ? '승리!' : '체크메이트'}</h1>
+            <p className="muted">
               {game.result === 'win'
                 ? '모든 왕을 무너뜨렸거나 대륙의 대부분을 차지했습니다.'
                 : human.deathCause === 'nuke'
                   ? '킹이 핵에 맞았습니다.'
-                  : `체크메이트 — ${game.players[human.killedBy]?.name ?? '적'}에게 킹을 잃었습니다.`}
+                  : `${game.players[human.killedBy]?.name ?? '적'}에게 킹을 잃었습니다.`}
             </p>
             <div className="rule-actions">
               <button className="go" onClick={onRestart}>

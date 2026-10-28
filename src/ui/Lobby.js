@@ -8,13 +8,14 @@ const randomSeed = () => Math.floor(Math.random() * 99999) + 1;
 
 export default function Lobby({ onStart, initial }) {
   const [name, setName] = useState(initial?.name || '나');
-  const [bots, setBots] = useState(initial?.bots || 7);
+  const [size, setSize] = useState(initial?.size || 'normal');
+  const [bots, setBots] = useState(initial?.bots || C.MAP_SIZES.normal.bots);
   const [difficulty, setDifficulty] = useState(initial?.difficulty || 'normal');
   const [seed, setSeed] = useState(randomSeed);
 
   const start = (e) => {
     e.preventDefault();
-    onStart({ name: name.trim() || '나', bots, difficulty, seed: Number(seed) || 1 });
+    onStart({ name: name.trim() || '나', bots, size, difficulty, seed: Number(seed) || 1 });
   };
 
   return (
@@ -26,14 +27,59 @@ export default function Lobby({ onStart, initial }) {
         <p className="muted">OpenFront 식 영토 전쟁 + 체스 장군 · 킹 · 특수 규칙</p>
       </header>
 
+      <section className="intro">
+        <div className="panel">
+          <span className="intro-glyph">{PIECES.king.glyph}</span>
+          <span>
+            <b>킹을 지켜라</b>
+            <span className="small-text muted">킹 주변 궁성에 적이 들어오면 체크, {C.CHECKMATE_TICKS / 10}초 버티지 못하면 체크메이트</span>
+          </span>
+        </div>
+        <div className="panel">
+          <span className="intro-glyph">{PIECES.knight.glyph}</span>
+          <span>
+            <b>기물로 출격</b>
+            <span className="small-text muted">룩은 넓게, 나이트는 정면돌파, 비숍은 대각선 — 금으로 장군을 붙여 공격</span>
+          </span>
+        </div>
+        <div className="panel">
+          <span className="intro-glyph">{PIECES.rook.glyph}</span>
+          <span>
+            <b>체스 규칙</b>
+            <span className="small-text muted">캐슬링으로 탈출, 앙파상으로 역포위, 폰은 프로모션</span>
+          </span>
+        </div>
+      </section>
+
       <form className="panel lobby-form" onSubmit={start}>
         <label>
           이름
           <input value={name} maxLength={12} onChange={(e) => setName(e.target.value)} />
         </label>
         <label>
-          봇 나라 <b>{bots}</b>
-          <input type="range" min="2" max="9" value={bots} onChange={(e) => setBots(Number(e.target.value))} />
+          지도 크기
+          <span className="segmented">
+            {Object.entries(C.MAP_SIZES).map(([k, m]) => (
+              <button
+                key={k}
+                type="button"
+                className={size === k ? 'active' : ''}
+                title={`${m.width}×${m.height}`}
+                onClick={() => {
+                  setSize(k);
+                  setBots(m.bots);
+                }}
+              >
+                {m.label}
+              </button>
+            ))}
+          </span>
+        </label>
+        <label>
+          <span>
+            봇 나라 <b>{bots}</b>
+          </span>
+          <input type="range" min="2" max={C.MAX_BOTS} value={bots} onChange={(e) => setBots(Number(e.target.value))} />
         </label>
         <label>
           난이도
@@ -59,7 +105,8 @@ export default function Lobby({ onStart, initial }) {
         </button>
       </form>
 
-      <section className="panel rules">
+      <details className="panel rules">
+        <summary>규칙 보기</summary>
         <h2>기본 (OpenFront 그대로)</h2>
         <ul>
           <li>지도의 빈 땅이나 적 땅을 클릭하면 아래 슬라이더 비율만큼 병력을 보내 공격합니다. 맞닿지 않은 곳은 배로 건너갑니다.</li>
@@ -114,7 +161,7 @@ export default function Lobby({ onStart, initial }) {
             통째로 되찾고 그 부대를 섬멸합니다.
           </li>
         </ul>
-      </section>
+      </details>
     </div>
   );
 }

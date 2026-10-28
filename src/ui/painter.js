@@ -203,12 +203,15 @@ export function drawScene(ctx, game, painter, cam, view, ui, hover, now) {
     outlinedText(ctx, `☢ ${((n.impactTick - game.tick) / 10).toFixed(1)}s`, x2, y2 - spec.radius * z - 10, 13);
   }
 
-  // 나이트 돌파 방향
+  // 나이트 · 비숍 돌파 방향
   for (const a of game.attacks) {
-    if (a.kind !== 'knight' || a.lastTile < 0) continue;
+    if ((a.kind !== 'knight' && a.kind !== 'diagonal') || a.lastTile < 0) continue;
     if (a.attacker !== hid && a.target !== hid) continue;
     const [x1, y1] = S(a.lastTile);
-    const [x2, y2] = S(a.aim);
+    let x2;
+    let y2;
+    if (a.kind === 'knight') [x2, y2] = S(a.aim);
+    else [x2, y2] = [x1 + a.diag.dx * 8 * z, y1 + a.diag.dy * 8 * z];
     if (Math.hypot(x2 - x1, y2 - y1) < 6) continue;
     arrow(ctx, x1, y1, x2, y2, a.attacker === hid ? 'rgba(253, 230, 138, 0.9)' : 'rgba(248, 113, 113, 0.95)', 2.5);
   }
@@ -255,17 +258,19 @@ export function drawScene(ctx, game, painter, cam, view, ui, hover, now) {
   // 나라 이름 · 병력
   for (const p of game.players) {
     if (!p || !p.alive || p.tiles < 20) continue;
-    const fs = Math.min(40, Math.sqrt(p.tiles) * z * 0.2);
+    const fs = Math.min(24, Math.sqrt(p.tiles) * z * 0.14);
     if (fs < 9) continue;
     const x = sx(p.sumX / p.tiles);
     const y = sy(p.sumY / p.tiles);
-    outlinedText(ctx, p.name, x, y - fs * 0.45, fs, 800);
-    outlinedText(ctx, fmt(p.troops), x, y + fs * 0.45, fs * 0.72, 600, '#e2e8f0');
+    ctx.globalAlpha = 0.85;
+    outlinedText(ctx, p.name, x, y - fs * 0.4, fs, 800);
+    outlinedText(ctx, fmt(p.troops), x, y + fs * 0.5, fs * 0.62, 600, '#e2e8f0');
+    ctx.globalAlpha = 1;
   }
 
   // 대기 중인 장군
   // 화면에서 서로 겹치는 같은 나라 기물은 하나로 묶어 가장 높은 기물 + 개수로 그린다
-  const gSize = clamp(z * 2.1, 13, 26);
+  const gSize = clamp(z * 2.4, 16, 30);
   const clusters = [];
   for (const [tile, set] of game.stationed) {
     for (const g of set) {
@@ -336,8 +341,20 @@ export function drawScene(ctx, game, painter, cam, view, ui, hover, now) {
     ctx.setLineDash([]);
   }
 
+  // 출격 중인 장군은 그 부대의 최전선을 따라다닌다 (나와 관련된 공격만)
+  for (const a of game.attacks) {
+    if (!a.general || a.lastTile < 0 || (a.attacker !== hid && a.target !== hid)) continue;
+    const [x, y] = S(a.lastTile);
+    const owner = game.players[a.attacker];
+    ctx.beginPath();
+    ctx.arc(x, y, gSize * (0.75 + 0.15 * pulse), 0, Math.PI * 2);
+    ctx.fillStyle = a.attacker === hid ? 'rgba(253, 224, 71, 0.25)' : 'rgba(248, 113, 113, 0.3)';
+    ctx.fill();
+    drawPiece(ctx, PIECES[a.general.type].glyph, x, y, gSize, owner.color, a.attacker === hid ? '#fde047' : '#fca5a5', 0.12);
+  }
+
   // 킹
-  const kSize = clamp(z * 3, 18, 40);
+  const kSize = clamp(z * 3.4, 22, 46);
   for (const p of game.players) {
     if (!p || !p.alive || p.king < 0) continue;
     const [x, y] = S(p.king);
@@ -348,7 +365,12 @@ export function drawScene(ctx, game, painter, cam, view, ui, hover, now) {
       ctx.lineWidth = 3;
       ctx.stroke();
     }
-    drawPiece(ctx, PIECES.king.glyph, x, y, kSize, p.color, p.isHuman ? '#facc15' : '#f8fafc', 0.11);
+    if (p.isHuman) {
+      ctx.shadowColor = 'rgba(250, 204, 21, 0.9)';
+      ctx.shadowBlur = 14 + 8 * pulse;
+    }
+    drawPiece(ctx, PIECES.king.glyph, x, y, kSize, p.color, p.isHuman ? '#facc15' : '#f8fafc', p.isHuman ? 0.14 : 0.11);
+    ctx.shadowBlur = 0;
   }
 
   // 마우스 아래
