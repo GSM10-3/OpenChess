@@ -7,8 +7,24 @@ import MapView, { focusTile } from './MapView';
 import { TopBar, Leaderboard, ControlPanel, EventLog } from './Hud';
 import ChessPanel, { PromotionDialog } from './ChessPanel';
 import ChessBanner from './ChessBanner';
+import Coach from './Coach';
+import { isMuted, setMuted } from './sound';
 
 const SPEEDS = [1, 2, 3];
+const PIECE_KEYS = { 1: 'queen', 2: 'rook', 3: 'bishop', 4: 'knight', 5: 'pawn' };
+
+// 결과 화면: 내 영토 비율 변화를 작은 꺾은선으로
+function Sparkline({ values }) {
+  if (values.length < 2) return null;
+  const max = Math.max(...values, 0.01);
+  const pts = values.map((v, i) => `${(i / (values.length - 1)) * 260},${60 - (v / max) * 56}`).join(' ');
+  return (
+    <svg className="spark" viewBox="0 0 260 62" preserveAspectRatio="none">
+      <polyline points={`0,62 ${pts} 260,62`} className="spark-fill" />
+      <polyline points={pts} className="spark-line" />
+    </svg>
+  );
+}
 
 export default function GameScreen({ config, onExit, onRestart }) {
   const gameRef = useRef(null);
@@ -106,22 +122,41 @@ export default function GameScreen({ config, onExit, onRestart }) {
     }
   };
 
+  // 단축키 (OpenFront 처럼 비율 조절 · 기물 선택을 키보드로)
+  const keyRef = useRef(null);
+  keyRef.current = (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'escape') {
+      setMode('attack');
+      setGeneralId(null);
+    } else if (k === ' ') {
+      e.preventDefault();
+      setPaused((v) => !v);
+    } else if (k === 'b') setMode((m) => (m === 'boat' ? 'attack' : 'boat'));
+    else if (k === 'q') setRatio((r) => Math.max(0.05, Math.round((r - 0.1) * 100) / 100));
+    else if (k === 'e') setRatio((r) => Math.min(1, Math.round((r + 0.1) * 100) / 100));
+    else if (k === 'k' && human.king >= 0) focus(human.king, 6);
+    else if (k === 'c' && castle.available) show(game.castle(human.id, castle.rooks[0].id));
+    else if (PIECE_KEYS[k] && playing) {
+      // 같은 종류의 대기 중인 기물을 차례로 고른다
+      const ready = human.generals.filter((g) => g.type === PIECE_KEYS[k] && g.status === 'idle');
+      if (!ready.length) return show({ ok: false, msg: `대기 중인 ${PIECES[PIECE_KEYS[k]].name}이 없습니다` });
+      const i = ready.findIndex((g) => g.id === generalId);
+      setGeneralId(ready[(i + 1) % ready.length].id);
+    }
+    return undefined;
+  };
   useEffect(() => {
     const onKey = (e) => {
-      if (e.target.tagName === 'INPUT') return;
-      if (e.key === 'Escape') {
-        setMode('attack');
-        setGeneralId(null);
-      } else if (e.key === ' ') {
-        e.preventDefault();
-        setPaused((v) => !v);
-      } else if (e.key === 'b' || e.key === 'B') setMode((m) => (m === 'boat' ? 'attack' : 'boat'));
+      if (e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey) return;
+      keyRef.current(e);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const offer = human.offers[0];
+  const allyOffer = human.allianceOffers[0];
   const checkLeft = playing && human.check ? Math.max(0, Math.ceil((C.CHECKMATE_TICKS - (game.tick - human.checkSince)) / 10)) : 0;
 
   return (
@@ -142,6 +177,10 @@ export default function GameScreen({ config, onExit, onRestart }) {
             speed={speed}
             onPause={() => setPaused((v) => !v)}
             onSpeed={() => setSpeed((s) => SPEEDS[(SPEEDS.indexOf(s) + 1) % SPEEDS.length])}
+            onMute={() => {
+              setMuted(!isMuted());
+              refresh();
+            }}
             onExit={onExit}
           />
           {playing && human.check > 0 && (
@@ -149,7 +188,13 @@ export default function GameScreen({ config, onExit, onRestart }) {
               {PIECES.king.glyph} 체크 — 체크메이트까지 <b>{checkLeft}</b>초
             </div>
           )}
-          <Leaderboard game={game} />
+          <Leaderboard
+            game={game}
+            onFocus={(t) => focus(t, 4)}
+            onAlly={(id) => show(game.requestAlliance(human.id, id))}
+            onBreak={(id) => show(game.breakAlliance(human.id, id))}
+          />
+          <Coach game={game} />
           <ControlPanel
             game={game}
             ratio={ratio}
@@ -181,9 +226,26 @@ export default function GameScreen({ config, onExit, onRestart }) {
           {/* 체스 규칙은 쓸 수 있을 때만 화면 가운데 아래에 큰 버튼으로 뜬다 */}
           <div className="action-dock">
             {offer && <PromotionDialog game={game} offer={offer} onResolve={(gid, yes) => show(game.resolvePromotion(human.id, gid, yes))} />}
+            {allyOffer && (
+              <div className="panel action-card alliance">
+                <div className="promo-glyphs">🤝</div>
+                <div>
+                  <b>{josa(game.players[allyOffer.from].name, '이/가')} 동맹을 제안합니다</b>
+                  <div className="muted small-text">
+                    {C.ALLIANCE_TICKS / 600}분 동안 서로 공격하지 않습니다 · {Math.ceil((allyOffer.until - game.tick) / 10)}초 안에 답하세요
+                  </div>
+                </div>
+                <div className="rule-actions">
+                  <button className="go" onClick={() => show(game.resolveAllianceOffer(human.id, allyOffer.from, true))}>
+                    수락
+                  </button>
+                  <button onClick={() => show(game.resolveAllianceOffer(human.id, allyOffer.from, false))}>거절</button>
+                </div>
+              </div>
+            )}
             {castle.available &&
               castle.rooks.map((r) => (
-                <button key={r.id} className="action castle" onClick={() => show(game.castle(human.id, r.id))}>
+                <button key={r.id} className="action castle" onClick={() => show(game.castle(human.id, r.id))} title="단축키 C">
                   <span className="action-glyph">{PIECES.rook.glyph}</span>
                   <span>
                     <b>캐슬링</b>
@@ -224,6 +286,29 @@ export default function GameScreen({ config, onExit, onRestart }) {
                   ? '킹이 핵에 맞았습니다.'
                   : `${game.players[human.killedBy]?.name ?? '적'}에게 킹을 잃었습니다.`}
             </p>
+            <Sparkline values={game.stats.history} />
+            <div className="result-stats">
+              <div>
+                <b>{Math.floor(game.stats.endTick / 600)}분 {Math.floor((game.stats.endTick / 10) % 60)}초</b>
+                <span>버틴 시간</span>
+              </div>
+              <div>
+                <b>{(game.stats.peak * 100).toFixed(1)}%</b>
+                <span>최대 영토</span>
+              </div>
+              <div>
+                <b>{game.stats.captured}</b>
+                <span>잡은 기물</span>
+              </div>
+              <div>
+                <b>{game.stats.lost}</b>
+                <span>잃은 기물</span>
+              </div>
+              <div>
+                <b>{game.stats.mates}</b>
+                <span>체크메이트</span>
+              </div>
+            </div>
             <div className="rule-actions">
               <button className="go" onClick={onRestart}>
                 다시 하기

@@ -392,5 +392,40 @@ export function drawScene(ctx, game, painter, cam, view, ui, hover, now) {
       ctx.lineWidth = 1.5;
       ctx.strokeRect(x - z / 2, y - z / 2, z, z);
     }
+    if (game.phase === 'play' && game.terrain[hover] !== C.WATER) drawHoverChip(ctx, game, hover, x, y, z);
   }
+}
+
+// 마우스를 올린 칸의 정보 한 줄: 남의 나라면 이름 · 병력 · 외교 상태, 무주지면 지형과 점령 비용
+function drawHoverChip(ctx, game, t, x, y, z) {
+  const hid = game.humanId;
+  const o = game.owner[t];
+  if (o === hid) return;
+  let text;
+  let color = '#e8edf5';
+  if (o) {
+    const p = game.players[o];
+    const tags = [game.allied(hid, o) ? '🤝 동맹' : '', game.isTraitor(o) ? '⚠ 배신자' : ''].filter(Boolean).join(' ');
+    text = `${p.name} · 병력 ${fmt(p.troops)}${tags ? ` · ${tags}` : ''}`;
+    color = p.color;
+  } else {
+    const terr = game.terrain[t];
+    text = `무주지 · ${C.TERRAIN_NAMES[terr]}${C.TERRAIN_COST[terr] > 1 ? ` (비용 ×${C.TERRAIN_COST[terr]})` : ''}`;
+  }
+  ctx.font = '600 12px "Noto Sans KR", system-ui, sans-serif';
+  const w = ctx.measureText(text).width + 22;
+  const bx = x + z + 10;
+  const by = y - 26;
+  ctx.fillStyle = 'rgba(9, 14, 26, 0.85)';
+  ctx.beginPath();
+  ctx.roundRect(bx, by, w, 22, 11);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(bx + 10, by + 11, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#e8edf5';
+  ctx.textAlign = 'left';
+  ctx.fillText(text, bx + 18, by + 11.5);
+  ctx.textAlign = 'center';
 }

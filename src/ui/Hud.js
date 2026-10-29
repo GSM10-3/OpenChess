@@ -2,6 +2,7 @@ import { useState } from 'react';
 import * as C from '../game/constants';
 import { PIECES, pieceLabel } from '../game/pieces';
 import { fmt } from '../game/Game';
+import { isMuted } from './sound';
 
 export const clock = (tick) => {
   const s = Math.floor(tick / 10);
@@ -9,7 +10,7 @@ export const clock = (tick) => {
 };
 
 // 꼭 필요한 숫자만: 병력(막대) · 금 · 시간(또는 평화 기간)
-export function TopBar({ game, paused, speed, onPause, onSpeed, onExit }) {
+export function TopBar({ game, paused, speed, onPause, onSpeed, onMute, onExit }) {
   const p = game.human;
   const max = C.maxTroops(p.tiles);
   const regen = C.troopRegen(p.troops, max) * 10;
@@ -45,6 +46,9 @@ export function TopBar({ game, paused, speed, onPause, onSpeed, onExit }) {
         <button className="icon" onClick={onSpeed} title="게임 속도">
           ×{speed}
         </button>
+        <button className="icon" onClick={onMute} title="효과음">
+          {isMuted() ? '🔇' : '🔊'}
+        </button>
         <button className="icon" onClick={onExit} title="나가기">
           ✕
         </button>
@@ -53,13 +57,14 @@ export function TopBar({ game, paused, speed, onPause, onSpeed, onExit }) {
   );
 }
 
-// 상위 다섯 나라와 나만. 접을 수 있다
-export function Leaderboard({ game }) {
+// 상위 다섯 나라 + 나 + 이웃 · 동맹국만. 나라를 누르면 외교 버튼이 열린다
+export function Leaderboard({ game, onFocus, onAlly, onBreak }) {
   const [open, setOpen] = useState(true);
+  const [sel, setSel] = useState(0);
+  const me = game.human;
   const all = game.players.filter((p) => p && p.spawned && p.alive).sort((a, b) => b.tiles - a.tiles);
-  const rows = all.slice(0, 5);
-  const meRank = all.findIndex((p) => p.isHuman);
-  if (meRank >= 5) rows.push(all[meRank]);
+  const near = me?.alive ? game.neighborsOf(me.id) : new Set();
+  const shown = all.filter((p, i) => i < 5 || p.isHuman || near.has(p.id) || game.allied(me.id, p.id));
   return (
     <div className="panel leaderboard">
       <button className="panel-title flat" onClick={() => setOpen((v) => !v)}>
@@ -68,14 +73,46 @@ export function Leaderboard({ game }) {
       </button>
       {open && (
         <ol>
-          {rows.map((p) => (
-            <li key={p.id} className={p.isHuman ? 'me' : ''}>
-              <span className="rank">{all.indexOf(p) + 1}</span>
-              <span className="dot" style={{ background: p.color }} />
-              <span className="name">{p.name}</span>
-              <span className="num">{((p.tiles / game.landCount) * 100).toFixed(1)}%</span>
-            </li>
-          ))}
+          {shown.map((p) => {
+            const ally = game.allied(me.id, p.id);
+            const left = ally ? game.allianceLeft(me.id, p.id) : 0;
+            return (
+              <li key={p.id} className={`${p.isHuman ? 'me' : ''} ${sel === p.id ? 'open' : ''}`}>
+                <button className="row flat" disabled={p.isHuman} onClick={() => setSel(sel === p.id ? 0 : p.id)} title={p.isHuman ? '' : '외교 · 위치'}>
+                  <span className="rank">{all.indexOf(p) + 1}</span>
+                  <span className="dot" style={{ background: p.color }} />
+                  <span className="name">{p.name}</span>
+                  {ally && <span title={`동맹 · ${Math.ceil(left / 10)}초 남음`}>🤝</span>}
+                  {game.isTraitor(p.id) && <span title="배신자">⚠</span>}
+                  {!ally && near.has(p.id) && <span className="muted tag" title="맞닿은 나라">이웃</span>}
+                  <span className="num">{((p.tiles / game.landCount) * 100).toFixed(1)}%</span>
+                </button>
+                {sel === p.id && !p.isHuman && (
+                  <div className="row-actions">
+                    <button className="small" onClick={() => onFocus(p.king)}>
+                      보기
+                    </button>
+                    {ally ? (
+                      <>
+                        {left <= C.ALLIANCE_RENEW_TICKS && (
+                          <button className="small go" onClick={() => onAlly(p.id)}>
+                            연장
+                          </button>
+                        )}
+                        <button className="small danger-btn" onClick={() => onBreak(p.id)} title="깨면 1분 동안 배신자가 됩니다">
+                          동맹 깨기 · {Math.ceil(left / 10)}초
+                        </button>
+                      </>
+                    ) : (
+                      <button className="small go" onClick={() => onAlly(p.id)} title={`${C.ALLIANCE_TICKS / 600}분 동안 서로 공격하지 않습니다`}>
+                        🤝 동맹 제안
+                      </button>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ol>
       )}
     </div>

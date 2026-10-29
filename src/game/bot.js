@@ -11,9 +11,9 @@ export const BOT_NAMES = [
 
 // focusCheck: 체크에 걸린 나라를 먼저 노릴 확률, targetHuman: 사람을 공격 대상에 넣을 확률
 export const DIFFICULTY = {
-  easy: { label: '쉬움', interval: 30, minTroops: 0.5, ratio: 0.2, nukeChance: 0.02, kingSnipe: 0.1, generals: 0.3, focusCheck: 0, targetHuman: 0.3 },
-  normal: { label: '보통', interval: 18, minTroops: 0.4, ratio: 0.28, nukeChance: 0.05, kingSnipe: 0.25, generals: 0.5, focusCheck: 0.5, targetHuman: 1 },
-  hard: { label: '어려움', interval: 10, minTroops: 0.3, ratio: 0.35, nukeChance: 0.08, kingSnipe: 0.4, generals: 0.7, focusCheck: 0.9, targetHuman: 1 },
+  easy: { label: '쉬움', interval: 30, minTroops: 0.5, ratio: 0.2, nukeChance: 0.02, kingSnipe: 0.1, generals: 0.3, focusCheck: 0, targetHuman: 0.3, allyOffer: 0.04 },
+  normal: { label: '보통', interval: 18, minTroops: 0.4, ratio: 0.28, nukeChance: 0.05, kingSnipe: 0.25, generals: 0.5, focusCheck: 0.5, targetHuman: 1, allyOffer: 0.02 },
+  hard: { label: '어려움', interval: 10, minTroops: 0.3, ratio: 0.35, nukeChance: 0.08, kingSnipe: 0.4, generals: 0.7, focusCheck: 0.9, targetHuman: 1, allyOffer: 0.01 },
 };
 
 // 내 땅에 맞닿은 주인별로 칸 하나씩
@@ -34,7 +34,7 @@ function scanNeighbors(game, pid) {
 
 function idle(game, p, types, reserve = 0) {
   for (const type of types) {
-    const g = p.generals.find((x) => x.type === type && x.status === 'idle');
+    const g = p.generals.find((x) => x.type === type && x.status === 'idle' && game.tick >= x.restUntil);
     if (g && p.gold >= PIECES[type].cost + reserve) return g;
   }
   return null;
@@ -49,7 +49,7 @@ function randomTileOf(game, pid) {
 }
 
 function tryNuke(game, p, d) {
-  const enemies = game.players.filter((q) => q && q.alive && q.spawned && q.id !== p.id);
+  const enemies = game.players.filter((q) => q && q.alive && q.spawned && q.id !== p.id && !game.allied(p.id, q.id));
   if (!enemies.length) return;
   const kind = p.gold >= C.NUKES.hydrogen.cost && game.rng() < 0.4 ? 'hydrogen' : 'atom';
   if (p.gold < C.NUKES[kind].cost) return;
@@ -84,7 +84,8 @@ function pickBoatTarget(game, p, neutralOnly) {
   let bestD = Infinity;
   for (let i = 0; i < 30; i++) {
     const t = game.coastTiles[Math.floor(game.rng() * game.coastTiles.length)];
-    if (t === undefined || game.owner[t] === p.id || (neutralOnly && game.owner[t])) continue;
+    const o = game.owner[t];
+    if (t === undefined || o === p.id || (neutralOnly && o) || (o && game.allied(p.id, o))) continue;
     const d = ((t % game.W) - cx) ** 2 + (((t / game.W) | 0) - cy) ** 2;
     if (d < bestD) {
       bestD = d;
@@ -135,11 +136,19 @@ export function botThink(game, p) {
     return;
   }
 
-  let enemies = peace ? [] : [...nb.keys()].filter((o) => o !== 0 && (!game.players[o].isHuman || rng() < d.targetHuman));
+  // 맞닿은 강한 봇은 가끔 사람에게 동맹을 제안한다 (OpenFront 식 외교)
+  const human = game.human;
+  if (human && human.alive && nb.has(human.id) && !game.allied(p.id, human.id) && rng() < d.allyOffer) {
+    if (!game.allianceRefusal(human.id, p.id) && !game.recentlyHostile(p.id, human.id)) game.offerAlliance(p.id, human.id);
+  }
+
+  let enemies = peace ? [] : [...nb.keys()].filter((o) => o !== 0 && !game.allied(p.id, o) && (!game.players[o].isHuman || rng() < d.targetHuman));
   if (inCheck) enemies = enemies.filter((o) => o === p.check);
   if (enemies.length && rng() < 0.92) {
     const checked = enemies.filter((o) => game.players[o].check);
-    const pool = checked.length && rng() < d.focusCheck ? checked : enemies;
+    const traitors = enemies.filter((o) => game.isTraitor(o));
+    let pool = checked.length && rng() < d.focusCheck ? checked : enemies;
+    if (traitors.length && rng() < 0.6) pool = traitors; // 배신자는 모두의 표적
     const target = pool.reduce((a, b) => (game.density(game.players[b]) < game.density(game.players[a]) ? b : a));
     const tp = game.players[target];
     let aim = nb.get(target);

@@ -1,3 +1,4 @@
+import * as C from '../game/constants';
 import { PIECES, pieceLabel, josa } from '../game/pieces';
 import { fmt } from '../game/Game';
 
@@ -28,12 +29,14 @@ export default function ChessPanel({ game, generalId, threat, onSelect, onFocus,
       );
     }
     const spec = PIECES[g.type];
+    const rest = g.status === 'idle' ? Math.max(0, g.restUntil - game.tick) : 0;
     return (
       <button
         key={g.id}
-        className={`sq ${dark ? 'dark' : ''} st-${g.status} ${g.id === generalId ? 'sel' : ''}`}
+        className={`sq ${dark ? 'dark' : ''} st-${g.status} ${g.id === generalId ? 'sel' : ''} ${rest ? 'resting' : ''}`}
+        style={rest ? { '--rest': rest / C.GENERAL_REST_TICKS } : undefined}
         disabled={g.status === 'captured'}
-        title={`${pieceLabel(g)} · ${STATUS[g.status]} · 금 ${fmt(spec.cost)}`}
+        title={`${pieceLabel(g)} · ${rest ? `휴식 ${Math.ceil(rest / 10)}초` : STATUS[g.status]} · 금 ${fmt(spec.cost)}`}
         onClick={() => onSelect(g.id === generalId ? null : g.id)}
       >
         <span className="glyph">{spec.glyph}</span>

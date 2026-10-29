@@ -49,6 +49,10 @@ export class Game {
     this.fallout = new Int32Array(this.N); // 이 틱까지 방사능
     this.falloutZones = [];
     this.stationed = new Map(); // 칸 → 그 칸에 대기 중인 장군들
+    this.alliances = new Map(); // "a-b" → { until } 동맹
+    this.hostile = new Map(); // "a-b" → 마지막으로 서로 싸운 틱
+    this.allyRetry = new Map(); // "요청-대상" → 이 틱까지 다시 제안 못 함
+    this.stats = { history: [], peak: 0, captured: 0, lost: 0, mates: 0, endTick: 0 }; // 사람의 기록 (결과 화면)
     this.dirty = []; // 화면을 다시 칠할 칸
 
     this.players = [null]; // 번호 = 배열 위치
@@ -144,6 +148,8 @@ export class Game {
       castled: false,
       check: 0, // 궁성에 들어온 적 (체크), 없으면 0
       checkSince: 0, // 체크가 시작된 틱
+      traitorUntil: 0, // 동맹을 깨면 이 틱까지 배신자
+      allianceOffers: [], // 봇이 사람에게 보낸 동맹 제안 { from, until }
       generals: [],
       offers: [], // 프로모션 제안 (사람만)
       killedBy: 0,
@@ -194,6 +200,7 @@ export class Game {
         status: 'idle',
         tile: -1,
         move: null,
+        restUntil: 0, // 이 틱까지 휴식 (출격 불가)
       };
       p.generals.push(g);
       this.station(g, this.nearestOwned(pid, x0 + f.dx, y0 + f.dy, tile));
@@ -273,6 +280,8 @@ export class Game {
     v.killedBy = killerId;
     v.deathCause = cause;
     const k = killerId ? this.players[killerId] : null;
+    if (this.humanId && killerId === this.humanId) this.stats.mates++;
+    for (const key of [...this.alliances.keys()]) if (key.split('-').map(Number).includes(vid)) this.alliances.delete(key);
     if (cause === 'nuke') {
       this.log(`☢ ${v.name}의 킹이 피폭되었습니다 — ${josa(v.name, '이/가')} 무너졌습니다`, 'big', [vid, killerId], 'checkmate', { nuke: true });
     } else {
@@ -338,6 +347,8 @@ export class Game {
     owner.offers = owner.offers.filter((o) => o.generalId !== g.id);
     const cp = captorPlayer ? this.players[captorPlayer] : null;
     const who = cp ? cp.name : '핵폭발';
+    if (this.humanId && captorPlayer === this.humanId) this.stats.captured++;
+    if (this.humanId && g.owner === this.humanId) this.stats.lost++;
     this.log(
       `${PIECES[g.type].glyph} ${owner.name}의 ${josa(pieceLabel(g), '이/가')} ${who}에게 잡혔습니다`,
       'chess',
@@ -457,6 +468,135 @@ export class Game {
     return fail(`평화 기간: ${Math.ceil(this.peaceLeft() / 10)}초 뒤부터 다른 나라를 공격할 수 있습니다`);
   }
 
+  // ───────────── 외교 ─────────────
+
+  pairKey(a, b) {
+    return a < b ? `${a}-${b}` : `${b}-${a}`;
+  }
+
+  // 내 땅과 맞닿은 나라들 (무주지 제외)
+  neighborsOf(pid) {
+    const out = new Set();
+    const { owner, nbr, N } = this;
+    for (let t = 0; t < N; t++) {
+      if (owner[t] !== pid) continue;
+      for (let k = 0; k < 4; k++) {
+        const n = nbr[t * 4 + k];
+        if (n >= 0 && owner[n] && owner[n] !== pid) out.add(owner[n]);
+      }
+    }
+    return out;
+  }
+
+  allied(a, b) {
+    return a !== b && this.alliances.has(this.pairKey(a, b));
+  }
+
+  allyFail(target) {
+    return fail(`${josa(this.players[target].name, '은/는')} 동맹국입니다 — 먼저 동맹을 깨세요`);
+  }
+
+  markHostile(a, b) {
+    if (a && b && a !== b) this.hostile.set(this.pairKey(a, b), this.tick);
+  }
+
+  recentlyHostile(a, b) {
+    const t = this.hostile.get(this.pairKey(a, b));
+    return t !== undefined && this.tick - t < C.HOSTILE_MEMORY;
+  }
+
+  isTraitor(pid) {
+    return this.tick < this.players[pid].traitorUntil;
+  }
+
+  // 봇이 동맹을 받아들일지: 최근에 싸우지 않았고, 상대가 배신자가 아니고, 너무 작은 나라가 아니면
+  allianceRefusal(from, to) {
+    const a = this.players[from];
+    const b = this.players[to];
+    if (this.recentlyHostile(from, to)) return `${josa(b.name, '이/가')} 최근에 싸운 상대라 거절했습니다`;
+    if (this.isTraitor(from)) return `배신자와는 동맹하지 않는다며 ${josa(b.name, '이/가')} 거절했습니다`;
+    if (b.tiles > a.tiles * C.ALLY_SIZE_LIMIT) return `${josa(b.name, '이/가')} 너무 작은 나라라며 거절했습니다`;
+    return '';
+  }
+
+  formAlliance(a, b) {
+    this.alliances.set(this.pairKey(a, b), { until: this.tick + C.ALLIANCE_TICKS });
+    // 서로를 향한 공격은 멈춘다
+    for (const x of this.attacks) if (!x.done && ((x.attacker === a && x.target === b) || (x.attacker === b && x.target === a))) this.endAttack(x);
+    this.log(`🤝 ${josa(this.players[a].name, '과/와')} ${josa(this.players[b].name, '이/가')} 동맹을 맺었습니다`, 'chess', [a, b], 'alliance');
+  }
+
+  requestAlliance(pid, target) {
+    const p = this.players[pid];
+    const t = this.players[target];
+    if (this.phase !== 'play' || !p?.alive || !t?.alive || pid === target) return fail('지금은 동맹을 맺을 수 없습니다');
+    if (this.allied(pid, target)) return this.renewAlliance(pid, target);
+    const retry = this.allyRetry.get(`${pid}-${target}`) || 0;
+    if (this.tick < retry) return fail(`${Math.ceil((retry - this.tick) / 10)}초 뒤에 다시 제안할 수 있습니다`);
+    const why = t.isHuman ? '' : this.allianceRefusal(pid, target);
+    if (why) {
+      this.allyRetry.set(`${pid}-${target}`, this.tick + C.ALLIANCE_RETRY);
+      return fail(why);
+    }
+    this.formAlliance(pid, target);
+    return ok(`${josa(t.name, '과/와')} 동맹 (${C.ALLIANCE_TICKS / 600}분)`);
+  }
+
+  allianceLeft(a, b) {
+    const al = this.alliances.get(this.pairKey(a, b));
+    return al ? Math.max(0, al.until - this.tick) : 0;
+  }
+
+  renewAlliance(pid, target) {
+    const al = this.alliances.get(this.pairKey(pid, target));
+    if (!al) return fail('동맹이 아닙니다');
+    if (al.until - this.tick > C.ALLIANCE_RENEW_TICKS) return fail(`만료 ${C.ALLIANCE_RENEW_TICKS / 10}초 전부터 연장할 수 있습니다`);
+    al.until = this.tick + C.ALLIANCE_TICKS;
+    return ok(`${josa(this.players[target].name, '과/와')} 동맹 연장`);
+  }
+
+  breakAlliance(pid, target) {
+    if (!this.allied(pid, target)) return fail('동맹이 아닙니다');
+    this.alliances.delete(this.pairKey(pid, target));
+    this.players[pid].traitorUntil = this.tick + C.TRAITOR_TICKS;
+    this.markHostile(pid, target);
+    this.log(`⚠ 배신! ${josa(this.players[pid].name, '이/가')} ${this.players[target].name}과의 동맹을 깼습니다`, 'big', [pid, target], 'betray');
+    return ok('동맹을 깼습니다 — 1분 동안 배신자');
+  }
+
+  // 봇이 사람에게 동맹을 제안한다 (사람이 수락 · 거절)
+  offerAlliance(from, to) {
+    const t = this.players[to];
+    if (!t.isHuman || this.allied(from, to) || t.allianceOffers.some((o) => o.from === from)) return;
+    t.allianceOffers.push({ from, until: this.tick + C.ALLIANCE_OFFER_TICKS });
+    this.log(`🤝 ${josa(this.players[from].name, '이/가')} 동맹을 제안했습니다`, 'chess', [to, from]);
+  }
+
+  resolveAllianceOffer(pid, from, accept) {
+    const p = this.players[pid];
+    const offer = p.allianceOffers.find((o) => o.from === from);
+    if (!offer) return fail('제안이 사라졌습니다');
+    p.allianceOffers = p.allianceOffers.filter((o) => o !== offer);
+    if (!accept) {
+      this.allyRetry.set(`${from}-${pid}`, this.tick + C.ALLIANCE_RETRY * 4);
+      return ok('동맹 제안을 거절했습니다');
+    }
+    if (!this.players[from].alive) return fail('그 나라는 이미 무너졌습니다');
+    this.formAlliance(pid, from);
+    return ok(`${josa(this.players[from].name, '과/와')} 동맹 (${C.ALLIANCE_TICKS / 600}분)`);
+  }
+
+  stepDiplomacy() {
+    for (const [key, al] of this.alliances) {
+      if (this.tick < al.until) continue;
+      this.alliances.delete(key);
+      const [a, b] = key.split('-').map(Number);
+      this.log(`🤝 ${josa(this.players[a].name, '과/와')} ${this.players[b].name}의 동맹이 끝났습니다`, 'chess', [a, b]);
+    }
+    const h = this.human;
+    if (h) h.allianceOffers = h.allianceOffers.filter((o) => o.until > this.tick && this.players[o.from].alive && !this.allied(h.id, o.from));
+  }
+
   // 장군 비용 · 병력 떼어내기
   commitForces(p, ratio, general) {
     const spec = general ? PIECES[general.type] : null;
@@ -521,10 +661,12 @@ export class Game {
     const target = this.owner[tile];
     if (target === pid) return fail('이미 내 땅입니다');
     if (target && this.peaceLeft()) return this.peaceFail();
+    if (target && this.allied(pid, target)) return this.allyFail(target);
     let general = null;
     if (generalId) {
       general = this.findGeneral(pid, generalId);
       if (!general || general.status !== 'idle') return fail('그 장군은 지금 출격할 수 없습니다');
+      if (this.tick < general.restUntil) return fail(`${josa(pieceLabel(general), '은/는')} 휴식 중입니다 — ${Math.ceil((general.restUntil - this.tick) / 10)}초 뒤 출격`);
     }
     const spec = general ? PIECES[general.type] : null;
     const frontier = !forceBoat && (!spec || spec.land) ? this.borderWith(pid, target) : null;
@@ -532,6 +674,7 @@ export class Game {
 
     const c = this.commitForces(p, ratio, general);
     if (!c.ok) return c;
+    this.markHostile(pid, target);
     const knight = !!spec?.breakthrough;
     const a = this.newAttack({
       attacker: pid,
@@ -728,6 +871,7 @@ export class Game {
     a.troops = 0;
     if (a.general && a.general.status === 'busy') {
       this.station(a.general, this.homeTile(p, a.lastTile >= 0 ? a.lastTile : a.origin));
+      a.general.restUntil = this.tick + C.GENERAL_REST_TICKS;
     }
   }
 
@@ -807,10 +951,12 @@ export class Game {
     const landing = this.findLanding(p.id, tile);
     if (landing < 0) return fail('근처에 상륙할 해안이 없습니다');
     if (this.owner[landing] && this.peaceLeft()) return this.peaceFail();
+    if (this.owner[landing] && this.allied(p.id, this.owner[landing])) return this.allyFail(this.owner[landing]);
     const path = this.seaPath(p.id, landing);
     if (!path) return fail('그곳으로 가는 바닷길이 없습니다');
     const c = this.commitForces(p, ratio, general);
     if (!c.ok) return c;
+    this.markHostile(p.id, this.owner[landing]);
     this.boats.push({
       id: this.nextId++,
       owner: p.id,
@@ -871,9 +1017,12 @@ export class Game {
     if (!p.alive) return;
     const L = b.landing;
     const target = this.owner[L];
-    if (target === b.owner || (target && this.peaceLeft())) {
+    if (target === b.owner || (target && (this.peaceLeft() || this.allied(b.owner, target)))) {
       p.troops += b.troops;
-      if (b.general) this.station(b.general, L);
+      if (b.general) {
+        this.station(b.general, L);
+        b.general.restUntil = this.tick + C.GENERAL_REST_TICKS;
+      }
       return;
     }
     const a = this.newAttack({
@@ -890,7 +1039,10 @@ export class Game {
     if (this.kingGuarded(target, L) || !this.capture(a, L)) {
       a.done = true;
       this.log(`${p.name}의 상륙이 해안에서 막혔습니다`, 'info', [b.owner, target]);
-      if (b.general) this.station(b.general, p.king);
+      if (b.general) {
+        this.station(b.general, p.king);
+        b.general.restUntil = this.tick + C.GENERAL_REST_TICKS;
+      }
       return;
     }
     if (b.general && a.surpriseLeft > 0) {
@@ -907,6 +1059,7 @@ export class Game {
     if (this.tick < C.NUKE_UNLOCK_TICK) return fail(`핵은 ${Math.ceil((C.NUKE_UNLOCK_TICK - this.tick) / 10)}초 뒤에 쓸 수 있습니다`);
     if (p.gold < spec.cost) return fail(`${spec.name}에는 금 ${fmt(spec.cost)}이 필요합니다`);
     if (tile < 0 || tile >= this.N) return fail('지도 안을 골라 주세요');
+    if (this.owner[tile] && this.allied(pid, this.owner[tile])) return this.allyFail(this.owner[tile]);
     let from = -1;
     let best = Infinity;
     for (let t = 0; t < this.N; t++) {
@@ -919,12 +1072,13 @@ export class Game {
     }
     if (from < 0) return fail('발사할 땅이 없습니다');
     p.gold -= spec.cost;
+    this.markHostile(pid, this.owner[tile]);
     const flight = Math.round(C.NUKE_MIN_FLIGHT + Math.sqrt(best) / C.NUKE_SPEED);
     this.nukes.push({ id: this.nextId++, owner: pid, kind, from, to: tile, launchTick: this.tick, impactTick: this.tick + flight, done: false });
     const hit = this.players.filter((q) => q && q.alive && q.id !== pid && q.king >= 0 && this.dist2(q.king, tile) <= (spec.radius + 3) ** 2).map((q) => q.id);
     const victim = this.owner[tile];
     const where = victim ? `${this.players[victim].name}의 영토` : '무주지';
-    this.log(`☢ ${josa(p.name, '이/가')} ${where}에 ${josa(spec.name, '을/를')} 쐈습니다${hit.length ? ' — 킹이 사정권에 있습니다!' : ''}`, 'nuke', [pid, victim, ...hit]);
+    this.log(`☢ ${josa(p.name, '이/가')} ${where}에 ${josa(spec.name, '을/를')} 쐈습니다${hit.length ? ' — 킹이 사정권에 있습니다!' : ''}`, 'nuke', [pid, victim, ...hit], 'nuke');
     return ok(`${spec.name} 발사 — ${(flight / 10).toFixed(1)}초 뒤 착탄`);
   }
 
@@ -1061,6 +1215,7 @@ export class Game {
       }
       p.check = by;
     }
+    this.stepDiplomacy();
     for (const p of this.players) if (p && !p.isHuman) botThink(this, p);
     this.stepMovers();
     for (const a of this.attacks) if (!a.done) this.stepAttack(a);
@@ -1070,7 +1225,16 @@ export class Game {
     this.attacks = this.attacks.filter((a) => !a.done);
     this.boats = this.boats.filter((b) => !b.done);
     this.nukes = this.nukes.filter((n) => !n.done);
+    this.recordStats();
     this.checkEnd();
+  }
+
+  recordStats() {
+    const h = this.human;
+    if (!h) return;
+    const share = h.tiles / this.landCount;
+    if (share > this.stats.peak) this.stats.peak = share;
+    if (this.tick % C.STATS_EVERY === 0 && h.alive) this.stats.history.push(share);
   }
 
   checkEnd() {
@@ -1090,5 +1254,6 @@ export class Game {
       this.phase = 'over';
       this.winner = alive[0]?.id || 0;
     }
+    if (this.phase === 'over') this.stats.endTick = this.tick;
   }
 }

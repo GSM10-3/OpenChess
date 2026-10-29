@@ -410,3 +410,89 @@ describe('앙파상', () => {
     expect(game.enPassant(a, ev.attackId).ok).toBe(false);
   });
 });
+
+describe('외교', () => {
+  test('동맹국은 공격 · 상륙 · 핵을 할 수 없고, 동맹은 시간이 지나면 끝난다', () => {
+    const { game, add, at } = setup();
+    const a = add('A', 15, 20);
+    const b = add('B', 26, 20);
+    add('C', 50, 30);
+    game.players[a].troops = 20000;
+    game.players[a].gold = 100000;
+    expect(game.requestAlliance(a, b).ok).toBe(true);
+    expect(game.allied(a, b)).toBe(true);
+    expect(game.launchAttack(a, game.players[b].king, { ratio: 0.3 }).ok).toBe(false);
+    expect(game.launchAttack(a, game.players[b].king, { ratio: 0.3, forceBoat: true }).ok).toBe(false);
+    game.tick = C.NUKE_UNLOCK_TICK;
+    expect(game.launchNuke(a, game.players[b].king, 'atom').ok).toBe(false);
+    game.alliances.get(game.pairKey(a, b)).until = game.tick + 1;
+    run(game, 2);
+    expect(game.allied(a, b)).toBe(false);
+    expect(game.launchAttack(a, at(26, 22), { ratio: 0.3 }).ok).toBe(true);
+  });
+
+  test('최근에 싸운 상대는 동맹을 거절하고, 동맹을 깨면 배신자가 된다', () => {
+    const { game, add } = setup();
+    const a = add('A', 15, 20);
+    const b = add('B', 26, 20);
+    const c = add('C', 40, 30);
+    game.players[a].troops = 20000;
+    game.launchAttack(a, game.players[b].king, { ratio: 0.1 });
+    expect(game.requestAlliance(a, b).ok).toBe(false);
+    expect(game.requestAlliance(a, c).ok).toBe(true);
+    expect(game.breakAlliance(a, c).ok).toBe(true);
+    expect(game.isTraitor(a)).toBe(true);
+    expect(game.events.some((e) => e.tag === 'betray')).toBe(true);
+    game.allyRetry.clear();
+    expect(game.requestAlliance(a, c).ok).toBe(false); // 배신자와는 동맹하지 않는다
+  });
+
+  test('봇이 제안한 동맹을 사람이 수락할 수 있다', () => {
+    const { game, add } = setup();
+    const a = add('A', 15, 20);
+    const b = add('B', 26, 20);
+    add('C', 50, 30);
+    game.players[a].isHuman = true;
+    game.humanId = a;
+    game.offerAlliance(b, a);
+    expect(game.players[a].allianceOffers).toHaveLength(1);
+    expect(game.resolveAllianceOffer(a, b, true).ok).toBe(true);
+    expect(game.allied(a, b)).toBe(true);
+  });
+});
+
+describe('장군 쿨다운', () => {
+  test('공격을 마친 장군은 잠시 쉬어야 다시 출격할 수 있다', () => {
+    const { game, add, at } = setup();
+    const a = add('A', 15, 20);
+    add('B', 45, 30);
+    const p = game.players[a];
+    p.gold = 100000;
+    p.troops = 2000;
+    const rook = game.findGeneral(a, `${a}:h`);
+    game.launchAttack(a, at(30, 20), { ratio: 0.1, generalId: rook.id });
+    run(game, 60);
+    expect(rook.status).toBe('idle');
+    expect(game.tick).toBeLessThan(rook.restUntil);
+    p.troops = 2000;
+    expect(game.launchAttack(a, at(30, 20), { ratio: 0.1, generalId: rook.id }).ok).toBe(false);
+    game.tick = rook.restUntil;
+    expect(game.launchAttack(a, at(30, 20), { ratio: 0.1, generalId: rook.id }).ok).toBe(true);
+  });
+});
+
+describe('기록', () => {
+  test('사람의 영토 비율과 잡은 기물이 기록된다', () => {
+    const { game, add } = setup();
+    const a = add('A', 15, 20);
+    const b = add('B', 26, 20);
+    game.players[a].isHuman = true;
+    game.humanId = a;
+    run(game, C.STATS_EVERY * 2);
+    expect(game.stats.history.length).toBeGreaterThanOrEqual(1);
+    expect(game.stats.peak).toBeGreaterThan(0);
+    const pawn = game.findGeneral(b, `${b}:pa`);
+    game.setOwner(pawn.tile, a);
+    expect(game.stats.captured).toBe(1);
+  });
+});

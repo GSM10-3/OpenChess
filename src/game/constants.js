@@ -63,6 +63,7 @@ export const FALLOUT_TICKS = 600;
 export const GENERAL_SPEED = 1; // 재배치 이동 속도 (칸/틱)
 export const FORTRESS_RADIUS = 5; // 대기 중인 룩 · 퀸 주변은 요새
 export const FORTRESS_MULT = 1.5;
+export const GENERAL_REST_TICKS = 150; // 공격을 마친 장군은 15초 쉬어야 다시 출격 (Kung Fu Chess 식 쿨다운)
 export const KNIGHT_WIDTH = 3; // 나이트 창끝 폭 (칸/틱)
 export const BISHOP_WIDTH = 1; // 비숍 대각선 띠: 직선에서 이만큼 벗어난 칸까지
 export const BISHOP_RATE = 3; // 비숍이 한 틱에 점령하는 칸 수
@@ -76,6 +77,18 @@ export const PALACE_MULT = 3; // 궁성 칸 점령 비용 배율 (나이트도 �
 export const CHECKMATE_TICKS = 80; // 체크가 8초 이어져야 킹 칸을 빼앗을 수 있다 → 캐슬링 · 반격할 틈
 export const HEIR_LAND_RADIUS = 20; // 킹을 잡으면 이 반경 안의 영토만 넘어오고 나머지는 무주지
 export const HEIR_GOLD_SHARE = 0.5; // 넘어오는 금고 비율
+
+// 외교 (OpenFront 식 동맹을 단순하게)
+export const ALLIANCE_TICKS = 3000; // 동맹은 5분
+export const ALLIANCE_RENEW_TICKS = 300; // 만료 30초 전부터 연장할 수 있다
+export const HOSTILE_MEMORY = 300; // 30초 안에 싸운 상대와는 동맹하지 않는다
+export const ALLIANCE_RETRY = 300; // 거절당하면 30초 뒤에 다시 제안
+export const TRAITOR_TICKS = 600; // 동맹을 깨면 1분 동안 배신자
+export const ALLY_SIZE_LIMIT = 2; // 봇은 자기보다 2배 넘게 작은 나라와는 동맹하지 않는다
+export const ALLIANCE_OFFER_TICKS = 200; // 봇의 동맹 제안은 20초 동안 유효
+
+// 결과 화면 기록
+export const STATS_EVERY = 50; // 5초마다 영토 비율 기록
 
 // 체스 규칙
 export const THREAT_RADIUS = 8; // 킹 주변 이 거리 안에 공격 중인 적이 오면 '위협'

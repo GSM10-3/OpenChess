@@ -145,6 +145,13 @@ export default function Lobby({ onStart, initial }) {
           어디로든 재배치할 수 있습니다.
         </p>
 
+        <h2>외교</h2>
+        <p>
+          순위표에서 나라를 누르면 <b>동맹</b>을 제안합니다. 동맹은 {C.ALLIANCE_TICKS / 600}분 동안 서로 공격할 수 없고, 깨면{' '}
+          {C.TRAITOR_TICKS / 600}분 동안 <b>배신자</b>가 되어 모두의 표적이 됩니다. 공격을 마친 장군은 {C.GENERAL_REST_TICKS / 10}초
+          쉬어야 다시 출격합니다.
+        </p>
+
         <h2>특수 규칙</h2>
         <ul>
           <li>
