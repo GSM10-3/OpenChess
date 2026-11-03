@@ -14,13 +14,11 @@ export const PIECES = {
   king: {
     name: '킹',
     glyph: '♚' + T,
-    value: 100,
     role: '수도. 킹을 잃으면 패배합니다.',
   },
   queen: {
     name: '퀸',
     glyph: '♛' + T,
-    value: 9,
     cost: 9000,
     land: true,
     sea: true,
@@ -36,7 +34,6 @@ export const PIECES = {
   rook: {
     name: '룩',
     glyph: '♜' + T,
-    value: 5,
     cost: 5000,
     land: true,
     landPower: 1.5,
@@ -47,7 +44,6 @@ export const PIECES = {
   bishop: {
     name: '비숍',
     glyph: '♝' + T,
-    value: 3,
     cost: 3000,
     land: true,
     sea: true,
@@ -62,7 +58,6 @@ export const PIECES = {
   knight: {
     name: '나이트',
     glyph: '♞' + T,
-    value: 3,
     cost: 3000,
     land: true,
     landPower: 1.8,
@@ -73,7 +68,6 @@ export const PIECES = {
   pawn: {
     name: '폰',
     glyph: '♟' + T,
-    value: 1,
     cost: 1000,
     land: true,
     sea: true,
@@ -85,14 +79,14 @@ export const PIECES = {
 
 export const PIECE_ORDER = ['queen', 'rook', 'bishop', 'knight', 'pawn'];
 
-// 시작 배치: 킹 옆으로 체스 첫 줄, 그 위로 폰 여덟
+// 시작 기물: 체스 첫 줄 7개(킹 제외) + 폰 8개. 이름은 파일 a~h
 const FILES = 'abcdefgh';
 const BACK_RANK = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'];
 export const FORMATION = [];
 BACK_RANK.forEach((type, i) => {
-  if (type !== 'king') FORMATION.push({ type, file: FILES[i], dx: i - 4, dy: 0 });
+  if (type !== 'king') FORMATION.push({ type, file: FILES[i] });
 });
-for (let i = 0; i < 8; i++) FORMATION.push({ type: 'pawn', file: FILES[i], dx: i - 4, dy: -1 });
+for (let i = 0; i < 8; i++) FORMATION.push({ type: 'pawn', file: FILES[i] });
 
 export function pieceLabel(g) {
   return `${PIECES[g.type].name}(${g.file}${g.promoted ? '·승격' : ''})`;

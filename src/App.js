@@ -6,7 +6,6 @@ import './App.css';
 function App() {
   const [config, setConfig] = useState(null);
   const [last, setLast] = useState(null);
-  const [round, setRound] = useState(0);
 
   if (!config) {
     return (
@@ -21,10 +20,10 @@ function App() {
   }
   return (
     <GameScreen
-      key={`${config.seed}-${round}`}
+      key={config.seed}
       config={config}
       onExit={() => setConfig(null)}
-      onRestart={() => setRound((r) => r + 1)}
+      onRestart={() => setConfig((c) => ({ ...c, seed: (c.seed % 99999) + 1 }))} // 같은 설정, 새 지도
     />
   );
 }

@@ -1,8 +1,8 @@
 :root {
   --bg: #0a1220;
-  --panel: rgba(9, 14, 26, 0.74);
+  --panel: rgba(9, 14, 26, 0.88);
   --panel-solid: #111a2c;
-  --line: rgba(255, 255, 255, 0.08);
+  --line: rgba(255, 255, 255, 0.14);
   --line-strong: rgba(255, 255, 255, 0.16);
   --text: #e8edf5;
   --muted: #8a97ab;
@@ -15,6 +15,12 @@
   --radius: 14px;
   --font: 'Noto Sans KR', system-ui, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
   --glyph-font: 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', 'Apple Symbols', serif;
+  /* 노치 · 홈 인디케이터를 피하는 여백 (viewport-fit=cover) */
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --tap: 48px; /* 터치 기기의 최소 누를 크기 */
 }
 
 /* 체스 글리프는 한글 글꼴이 아니라 기호 글꼴로 (지도 그리기와 같은 글꼴) */
@@ -69,9 +75,11 @@ button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
+/* 선택은 노란 테두리 + 채움 (색 말고도 테두리 두께로 구분) */
 button.active {
-  background: rgba(59, 130, 246, 0.35);
-  border-color: #60a5fa;
+  background: rgba(250, 204, 21, 0.22);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 button.go {
   background: #16a34a;
@@ -137,9 +145,6 @@ input[type='range'] {
 .danger {
   color: var(--bad);
 }
-.safe {
-  color: var(--good);
-}
 
 .panel {
   background: var(--panel);
@@ -174,24 +179,25 @@ input[type='range'] {
   cursor: crosshair;
   touch-action: none;
 }
-.mode-move .map-wrap canvas {
-  cursor: copy;
-}
 
 .game > .panel,
 .game > .toast,
+.bottom-dock > .toast,
 .game > .paused,
 .game > .eventlog,
-.game > .chess-banner,
-.game > .check-timer,
-.game > .action-dock {
+.bottom-dock > .panel,
+.bottom-dock > .action-dock {
   position: absolute;
   z-index: 2;
+}
+/* 넓은 화면에서는 상자 없이 자식만 (각자 제자리), 폰에서는 아래에 한 덩어리 */
+.bottom-dock {
+  display: contents;
 }
 
 /* 상단 바 */
 .topbar {
-  top: 12px;
+  top: calc(12px + var(--sat));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -221,17 +227,52 @@ input[type='range'] {
 .stat.peace b {
   color: var(--good);
 }
+.stat.traitor-chip b {
+  font-size: 13px;
+  color: var(--accent);
+}
+.stat b.overtime {
+  font-size: 13px;
+  color: var(--accent);
+}
 .bar {
-  width: 56px;
-  height: 5px;
+  position: relative;
+  display: flex;
+  width: 64px;
+  height: 7px;
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.1);
+  border: 1px solid transparent;
   overflow: hidden;
 }
-.bar span {
-  display: block;
+/* 병력이 상한의 10% 아래: 테두리만 빨강 */
+.bar.low {
+  border-color: var(--bad);
+}
+.bar-own {
   height: 100%;
-  background: linear-gradient(90deg, #60a5fa, #a5f3fc);
+  background: var(--accent);
+}
+/* 출전 중인 병력 */
+.bar-out {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.35);
+}
+/* 회복이 가장 빠른 지점 */
+.bar-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.7);
+}
+.stat .rate {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.stat .rate.up {
+  color: #86efac;
 }
 .topbar-buttons {
   display: flex;
@@ -240,8 +281,8 @@ input[type='range'] {
 
 /* 순위 */
 .leaderboard {
-  top: 12px;
-  left: 12px;
+  top: calc(12px + var(--sat));
+  left: calc(12px + var(--sal));
   width: 200px;
   padding: 8px 12px;
 }
@@ -258,7 +299,7 @@ input[type='range'] {
 .leaderboard .rank {
   width: 14px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .leaderboard .name {
   flex: 1;
@@ -276,8 +317,8 @@ input[type='range'] {
 
 /* 공격 */
 .controls {
-  bottom: 12px;
-  left: 12px;
+  bottom: calc(12px + var(--sab));
+  left: calc(12px + var(--sal));
   width: 290px;
   display: flex;
   flex-direction: column;
@@ -290,6 +331,7 @@ input[type='range'] {
 }
 .ratio input {
   flex: 1;
+  min-width: 0;
 }
 .ratio-value {
   display: flex;
@@ -300,7 +342,7 @@ input[type='range'] {
   font-variant-numeric: tabular-nums;
 }
 .ratio-value .muted {
-  font-size: 11px;
+  font-size: 12px;
 }
 .modes {
   display: grid;
@@ -319,7 +361,7 @@ input[type='range'] {
   line-height: 1;
 }
 .mode-name {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .modes button.active .mode-name {
@@ -327,10 +369,6 @@ input[type='range'] {
 }
 .modes button.nuke .mode-icon {
   color: #fb923c;
-}
-.hint {
-  font-size: 12px;
-  color: var(--accent);
 }
 .leader {
   display: flex;
@@ -365,11 +403,25 @@ input[type='range'] {
   padding: 2px 0;
   font-size: 13px;
 }
+/* 받는 공격: 빨간 글씨, 누르면 그 전선으로 */
+.ops li.incoming {
+  display: block;
+}
+.ops li.incoming button {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 1px 0;
+  color: var(--bad);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+}
 
 /* 체스판 */
 .chess {
-  top: 12px;
-  right: 12px;
+  top: calc(12px + var(--sat));
+  right: calc(12px + var(--sar));
   width: 244px;
   display: flex;
   flex-direction: column;
@@ -391,7 +443,7 @@ input[type='range'] {
   color: #fff;
   background: rgba(239, 68, 68, 0.55);
   border-color: var(--bad);
-  animation: blink 0.9s ease-in-out infinite;
+  animation: blink 0.9s ease-in-out 3; /* 세 번만 깜빡이고 멈춘 강조 */
 }
 .king-glyph {
   font-size: 18px;
@@ -401,6 +453,7 @@ input[type='range'] {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 5px;
+  padding-top: 4px; /* 모서리 밖으로 나온 개수 배지 자리 */
 }
 .piece {
   position: relative;
@@ -427,34 +480,48 @@ input[type='range'] {
 }
 .piece .count {
   position: absolute;
-  top: 2px;
-  right: 4px;
+  top: -6px;
+  right: -4px;
   min-width: 16px;
   padding: 0 4px;
   border-radius: 99px;
   background: #0f172a;
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 16px;
 }
 .piece .cost {
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   color: #713f12;
 }
 .piece .cost.short {
   color: #b91c1c;
 }
+/* 짙은 칸(룩 · 나이트): 비용은 밝은 글자로 */
+.piece:nth-child(even) .cost,
+.piece:nth-child(even) .cost-icon {
+  color: #fff7e6;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+.piece:nth-child(even) .cost.short {
+  color: #fecaca;
+}
 .piece.dim .glyph {
   opacity: 0.4;
 }
 .piece.sel {
-  background: #bfdbfe;
-  box-shadow: inset 0 0 0 3px #2563eb;
+  background: #fde68a;
+  box-shadow: inset 0 0 0 3px #ca8a04;
 }
 .piece:disabled {
   opacity: 0.25;
+}
+.piece .cost-icon {
+  color: #a16207;
+  font-size: 10px;
+  margin-right: 2px;
 }
 .piece-name {
   color: var(--text);
@@ -468,8 +535,8 @@ input[type='range'] {
 
 /* 사건 알림 */
 .eventlog {
-  bottom: 12px;
-  right: 12px;
+  bottom: calc(12px + var(--sab));
+  right: calc(12px + var(--sar));
   width: 330px;
   display: flex;
   flex-direction: column;
@@ -479,14 +546,30 @@ input[type='range'] {
 }
 .ev {
   max-width: 100%;
-  font-size: 12px;
+  font-family: var(--font), var(--glyph-font); /* 로그 속 ♚ 같은 글리프는 기호 글꼴로 */
+  font-size: 13px;
   line-height: 1.4;
+  text-align: left;
   padding: 5px 10px;
   border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--line);
   backdrop-filter: blur(8px);
   transition: opacity 0.3s;
+  pointer-events: auto;
+}
+.ev:disabled {
+  cursor: default;
+}
+/* 중요도: 위험은 빨강, 나에게 좋은 일은 노랑 왼쪽 테두리 */
+.ev.ev-bad {
+  border-left: 3px solid var(--bad);
+}
+.ev.ev-good {
+  border-left: 3px solid var(--accent);
+}
+.ev-count {
+  color: var(--text);
 }
 .ev-big {
   color: var(--accent);
@@ -499,11 +582,41 @@ input[type='range'] {
   color: var(--chess);
 }
 
+/* 상단 가운데 알림: 체크 타이머 → 안내 → 작은 체스 배너 순서로 한 줄씩 쌓여 서로 덮지 않는다 */
+.top-stack {
+  position: absolute;
+  z-index: 2;
+  top: calc(66px + var(--sat));
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.top-stack > .check-timer,
+.top-stack > .chess-banner.small {
+  position: static;
+  transform: none;
+  max-width: 100%;
+}
+.top-stack > .coach {
+  pointer-events: auto;
+}
+/* 큰 배너는 묶음과 따로 화면 위쪽 가운데에 */
+.top-stack > .chess-banner:not(.small) {
+  position: absolute;
+  top: 54px;
+}
+
 /* 체스 사건 연출 */
 .chess-banner {
   top: 120px;
   left: 50%;
   transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -513,7 +626,7 @@ input[type='range'] {
   border: 1px solid var(--chess);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
   pointer-events: none;
-  animation: banner 1.8s ease-out both;
+  animation: banner 2.2s ease-out both;
 }
 .banner-glyph {
   font-size: 64px;
@@ -526,7 +639,7 @@ input[type='range'] {
   margin-top: 4px;
 }
 .banner-sub {
-  font-size: 15px;
+  font-size: 17px;
   color: var(--muted);
 }
 .chess-banner.tone-danger {
@@ -545,14 +658,13 @@ input[type='range'] {
   color: var(--chess);
 }
 .chess-banner.small {
-  top: 74px;
   flex-direction: row;
   gap: 10px;
   padding: 6px 16px;
   border-width: 1px;
   border-color: var(--line-strong);
   box-shadow: none;
-  animation: banner-small 1.45s ease-out both;
+  animation: banner-small 1.75s ease-out both;
 }
 .chess-banner.small .banner-glyph {
   font-size: 22px;
@@ -562,22 +674,28 @@ input[type='range'] {
   margin: 0;
 }
 .chess-banner.small .banner-sub {
-  font-size: 12px;
+  font-size: 13px;
+}
+
+/* 화면 테두리 경보: 체크 · 배신은 빨강, 큰 침공은 주황 */
+.alert-frame {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  border: 14px solid;
+  opacity: 0;
+  animation: alert-frame 1.6s ease-in-out 2;
+}
+.alert-frame.red {
+  border-color: rgba(238, 0, 0, 0.75);
+}
+.alert-frame.orange {
+  border-color: rgba(255, 165, 0, 0.7);
 }
 
 /* 체크 */
-.check-vignette {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  box-shadow: inset 0 0 140px 40px rgba(239, 68, 68, 0.55);
-  animation: blink 0.9s ease-in-out infinite;
-}
 .check-timer {
-  top: 66px;
-  left: 50%;
-  transform: translateX(-50%);
   padding: 7px 18px;
   border-radius: 999px;
   background: rgba(127, 29, 29, 0.92);
@@ -585,6 +703,13 @@ input[type='range'] {
   font-weight: 700;
   font-size: 15px;
   white-space: nowrap;
+}
+.check-timer.urgent {
+  background: rgba(185, 28, 28, 0.96);
+  color: #fff;
+}
+.check-timer.urgent b {
+  color: #fecaca;
 }
 .check-timer b {
   font-size: 22px;
@@ -594,9 +719,11 @@ input[type='range'] {
 
 /* 상황별 체스 버튼 */
 .action-dock {
-  bottom: 24px;
+  bottom: calc(24px + var(--sab));
   left: 50%;
   transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 24px);
   display: flex;
   align-items: flex-end;
   gap: 10px;
@@ -657,9 +784,11 @@ input[type='range'] {
 }
 
 .spawn-banner {
-  top: 16px;
+  top: calc(16px + var(--sat));
   left: 50%;
   transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 24px);
   text-align: center;
   padding: 10px 22px;
   border-radius: 999px;
@@ -679,6 +808,8 @@ input[type='range'] {
   bottom: 110px;
   left: 50%;
   transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 24px);
   background: #14532d;
   border: 1px solid var(--good);
   border-radius: 999px;
@@ -690,6 +821,12 @@ input[type='range'] {
 .toast.bad {
   background: #7f1d1d;
   border-color: var(--bad);
+}
+/* 동맹 카드 · 체스 버튼이 떠 있으면 그 위로 올린다 */
+@media (min-width: 761px) {
+  .game:has(.action-dock > *) .toast:not(.center) {
+    bottom: calc(200px + var(--sab));
+  }
 }
 
 .overlay {
@@ -720,6 +857,11 @@ input[type='range'] {
 @keyframes blink {
   50% {
     opacity: 0.5;
+  }
+}
+@keyframes alert-frame {
+  50% {
+    opacity: 1;
   }
 }
 @keyframes rise {
@@ -761,36 +903,156 @@ input[type='range'] {
   }
 }
 
+/* 좁은 화면: 순위표는 상단 바 아래 왼쪽에 접힌 채로 (눌러서 펼치면 외교 버튼) */
 @media (max-width: 1150px) {
   .leaderboard {
-    display: none;
+    top: calc(60px + var(--sat));
+    width: 180px;
+    padding: 6px 10px;
   }
 }
 @media (max-width: 760px) {
+  .top-stack {
+    top: calc(104px + var(--sat));
+  }
+  .top-stack > .chess-banner:not(.small) {
+    top: 16px;
+  }
+  /* 상단 바: 한 줄에 다 들어가게 줄이고, 넘치면 숫자 쪽을 자른다 (✕ 는 항상 보이게) */
   .topbar {
-    left: 12px;
-    right: 12px;
+    left: calc(12px + var(--sal));
+    right: calc(12px + var(--sar));
     transform: none;
-    gap: 10px;
+    gap: 6px;
+    padding: 4px 4px 4px 12px;
     justify-content: space-between;
+    overflow: hidden;
+  }
+  .topbar .stat {
+    min-width: 0;
+    gap: 4px;
+  }
+  .topbar .stat b {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar .rate,
+  .peace-word,
+  .speed-btn {
+    display: none;
+  }
+  .topbar-buttons {
+    flex: none;
+  }
+  .topbar button.icon {
+    width: 34px;
+    height: 34px;
   }
   .bar {
     display: none;
   }
-  .chess {
-    top: auto;
-    bottom: 12px;
-    width: 180px;
+  .gold-rate,
+  .piece .cost-icon {
+    display: none;
+  }
+  .piece .cost {
+    font-size: 12px;
+    letter-spacing: -0.3px;
+  }
+  .chess-banner {
+    padding: 14px 20px 12px;
   }
   .chess > .small-text,
   .eventlog {
     display: none;
   }
-  .controls {
-    width: calc(100vw - 216px);
+  /* 토스트: 아래 묶음 맨 위에 (가운데 경고만 화면 가운데) */
+  .bottom-dock > .toast {
+    position: static;
+    order: -1;
+    align-self: center;
+    transform: none;
   }
-  .action-dock {
-    bottom: 200px;
+  .bottom-dock > .toast.center {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* 아래 묶음: 위에서부터 체스 버튼 · 기물 다섯 · 비율 + 모드 넷 (엄지가 닿는 곳에, 서로 밀지 않게) */
+  .bottom-dock {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: absolute;
+    z-index: 2;
+    left: calc(8px + var(--sal));
+    right: calc(8px + var(--sar));
+    bottom: calc(8px + var(--sab));
+    pointer-events: none;
+  }
+  .bottom-dock > .panel,
+  .bottom-dock > .action-dock {
+    position: static;
+    width: auto;
+    pointer-events: auto;
+  }
+  .bottom-dock > .action-dock {
+    order: 0;
+    transform: none;
+    max-width: none;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .bottom-dock > .chess {
+    order: 1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+  .bottom-dock > .controls {
+    order: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px 8px;
+    padding: 6px 8px;
+  }
+  /* 킹 줄: 평소엔 글리프만, 위험하면 한 줄 전체로 이유까지 */
+  .bottom-dock .king-line {
+    width: auto;
+    padding: 5px 6px;
+  }
+  .bottom-dock .king-line:not(.danger) > span:last-child {
+    display: none;
+  }
+  .bottom-dock .king-line.danger {
+    grid-column: 1 / -1;
+  }
+  .bottom-dock .modes {
+    grid-template-columns: repeat(4, 44px);
+    gap: 4px;
+  }
+  .bottom-dock .ratio {
+    gap: 6px;
+  }
+  .bottom-dock .ratio-value {
+    min-width: 40px;
+  }
+  .bottom-dock .leader,
+  .bottom-dock .ops {
+    grid-column: 1 / -1;
+  }
+  .bottom-dock .ops {
+    max-height: 72px;
+  }
+  .action {
+    padding: 8px 14px 8px 10px;
+  }
+  .action-glyph {
+    font-size: 28px;
   }
 }
 
@@ -913,6 +1175,12 @@ button.play:hover:not(:disabled) {
   color: var(--text);
   font-weight: 700;
 }
+.segmented small {
+  margin-left: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
 .seed {
   display: flex;
   gap: 6px;
@@ -1016,6 +1284,12 @@ button.link:hover:not(:disabled) {
 .piece-table .num {
   white-space: nowrap;
 }
+/* 폰 화면: 상단 바가 넘치지 않게 초당 회복량은 접는다 (막대 title 에 있다) */
+@media (max-width: 440px) {
+  .stat .rate {
+    display: none;
+  }
+}
 @media (max-width: 560px) {
   .brand h1 {
     font-size: 40px;
@@ -1034,7 +1308,7 @@ button.link:hover:not(:disabled) {
   }
 }
 
-/* ───────── 외교 · 안내 · 쿨다운 · 결과 ───────── */
+/* ───────── 외교 · 안내 · 결과 ───────── */
 
 .leaderboard li {
   display: block;
@@ -1061,7 +1335,7 @@ button.link:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.08);
 }
 .leaderboard .tag {
-  font-size: 10px;
+  font-size: 12px;
   padding: 0 5px;
   border: 1px solid var(--line-strong);
   border-radius: 99px;
@@ -1072,6 +1346,9 @@ button.link:hover:not(:disabled) {
   gap: 5px;
   padding: 4px 4px 6px 25px;
 }
+button.dim {
+  opacity: 0.5;
+}
 button.danger-btn {
   background: rgba(239, 68, 68, 0.25);
   border-color: rgba(248, 113, 113, 0.6);
@@ -1081,36 +1358,42 @@ button.danger-btn:hover:not(:disabled) {
 }
 
 .coach {
-  position: absolute;
-  z-index: 2;
-  top: 66px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  max-width: min(720px, calc(100vw - 32px));
-  padding: 7px 8px 7px 10px;
-  border-radius: 999px;
+  gap: 8px;
+  width: max-content;
+  max-width: min(640px, calc(100vw - 32px));
+  padding: 12px 20px 8px;
+  border-radius: 16px;
   background: var(--panel-solid);
-  border: 1px solid var(--line-strong);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  font-size: 13px;
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  text-align: center;
+  pointer-events: auto;
   animation: rise 0.3s ease-out;
 }
-.coach-dot {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #1a1300;
-  font-weight: 900;
+.coach-text {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.4;
 }
-.coach button {
-  flex: none;
+.coach-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+/* 안내가 가리키는 화면 요소: 노란 테두리가 2초마다 맥동 */
+.coach-target {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  animation: coach-pulse 2s ease-in-out infinite;
+}
+@keyframes coach-pulse {
+  50% {
+    outline-color: rgba(250, 204, 21, 0.25);
+    outline-offset: 6px;
+  }
 }
 button.flat-link {
   background: none;
@@ -1141,7 +1424,7 @@ button.flat-link {
 }
 .result-stats {
   display: grid;
-  grid-template-columns: repeat(5, auto);
+  grid-template-columns: repeat(4, auto);
   gap: 6px 18px;
   justify-content: center;
   margin: 10px 0 16px;
@@ -1156,13 +1439,204 @@ button.flat-link {
   font-variant-numeric: tabular-nums;
 }
 .result-stats span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 @media (max-width: 760px) {
   .coach {
-    top: 100px;
-    border-radius: 14px;
-    flex-wrap: wrap;
+    padding: 10px 14px 6px;
+  }
+  .coach-text {
+    font-size: 15px;
+  }
+}
+
+/* 화면 읽기 프로그램에만 들리는 알림 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* OS '동작 줄이기': 커지고 튀는 움직임은 페이드로, 깜빡임은 멈춘 표시로 */
+@media (prefers-reduced-motion: reduce) {
+  .chess-banner,
+  .chess-banner.small {
+    animation-name: banner-small;
+  }
+  .action,
+  .toast,
+  .action-card,
+  .coach {
+    animation-name: fade;
+  }
+  .king-line.danger,
+  .coach-target {
+    animation: none;
+  }
+  .alert-frame {
+    animation: alert-frame 3.2s ease-in-out 1;
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.quick .first-hint {
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+}
+
+/* 본문 사이에 끼운 체스 글리프 */
+.inline-glyph {
+  font-size: 1.2em;
+  line-height: 1;
+  vertical-align: -0.1em;
+}
+
+/* 결과 화면: 페이드인, 한 줄 결론, 조용한 '로비로' | 노란 '다시 하기' */
+.result-overlay {
+  animation: fade 0.8s ease-out;
+}
+.result-line {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 15px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0 6px;
+}
+.result-tip {
+  margin: -6px 0 12px;
+}
+.result .result-actions {
+  justify-content: space-between;
+  gap: 12px;
+}
+.result-actions button {
+  min-width: 110px;
+  padding: 9px 16px;
+}
+button.quiet {
+  background: none;
+  color: var(--muted);
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a1300;
+  font-weight: 800;
+}
+button.primary:hover:not(:disabled) {
+  background: #fde047;
+}
+button.primary:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* 첫 판 저병력 경고: 화면 가운데 */
+.toast.center {
+  bottom: auto;
+  top: 45%;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 10px 22px;
+}
+
+.spawn-banner button {
+  margin-top: 6px;
+}
+.spawn-actions {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+/* 모바일 외교 시트: 지도에서 나라를 길게 누르면 아래에 (비모달, 한 번에 하나) */
+.game > .sheet {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(12px + var(--sab));
+  width: min(420px, calc(100vw - 16px - var(--sal) - var(--sar)));
+  max-height: 40vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: var(--panel-solid);
+  border-color: rgba(250, 204, 21, 0.45);
+  animation: rise 0.2s ease-out;
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sheet-name {
+  font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-actions {
+  padding: 4px 0 0;
+  gap: 8px;
+}
+
+/* 터치 기기: 누를 곳은 48px, 작은 버튼은 보이는 크기 그대로 누르는 영역만 넓힌다 */
+@media (pointer: coarse) {
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+  .piece,
+  .modes button,
+  .leaderboard .row {
+    min-height: var(--tap);
+  }
+  .leaderboard ol {
+    max-height: 50vh;
+    overflow: auto;
+  }
+  button.small {
+    position: relative;
+    min-height: 32px;
+  }
+  button.small::before {
+    content: '';
+    position: absolute;
+    inset: -8px -3px;
+  }
+  button.icon {
+    position: relative;
+    width: 40px;
+    height: 40px;
+  }
+  button.icon::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+  }
+  .sheet-actions button.small {
+    min-height: 40px;
+    padding: 4px 14px;
+    font-size: 14px;
+  }
+  /* 누르는 순간 노란 빛 */
+  button:active:not(:disabled) {
+    box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.5);
   }
 }

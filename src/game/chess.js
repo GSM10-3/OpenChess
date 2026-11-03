@@ -122,7 +122,7 @@ export function evaluatePocket(game, a) {
 export function enPassantOptions(game, pid) {
   const res = [];
   for (const a of game.attacks) {
-    if (a.done || a.target !== pid || !a.attacker) continue;
+    if (a.done || a.target !== pid || !a.attacker || a.kind === 'knight') continue; // 나이트는 뛰어넘으므로 앙파상에 걸리지 않는다
     res.push(evaluatePocket(game, a));
   }
   return res;
