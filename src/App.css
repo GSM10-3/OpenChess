@@ -20,7 +20,6 @@
 /* 체스 글리프는 한글 글꼴이 아니라 기호 글꼴로 (지도 그리기와 같은 글꼴) */
 .glyph,
 .logo-glyph,
-.intro-glyph,
 .leader-glyph,
 .king-glyph,
 .banner-glyph,
@@ -147,8 +146,8 @@ input[type='range'] {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 10px 12px;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 .panel-title {
   display: flex;
@@ -452,7 +451,7 @@ input[type='range'] {
 }
 .piece.sel {
   background: #bfdbfe;
-  box-shadow: inset 0 0 0 3px #2563eb, 0 0 14px rgba(96, 165, 250, 0.6);
+  box-shadow: inset 0 0 0 3px #2563eb;
 }
 .piece:disabled {
   opacity: 0.25;
@@ -511,8 +510,8 @@ input[type='range'] {
   padding: 18px 40px 16px;
   border-radius: 22px;
   background: rgba(9, 14, 26, 0.82);
-  border: 2px solid var(--chess);
-  box-shadow: 0 0 60px rgba(167, 139, 250, 0.45);
+  border: 1px solid var(--chess);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
   pointer-events: none;
   animation: banner 1.8s ease-out both;
 }
@@ -532,14 +531,12 @@ input[type='range'] {
 }
 .chess-banner.tone-danger {
   border-color: var(--bad);
-  box-shadow: 0 0 60px rgba(239, 68, 68, 0.5);
 }
 .chess-banner.tone-danger .banner-title {
   color: var(--bad);
 }
 .chess-banner.tone-good {
   border-color: var(--good);
-  box-shadow: 0 0 60px rgba(74, 222, 128, 0.4);
 }
 .chess-banner.tone-good .banner-title {
   color: var(--good);
@@ -612,7 +609,8 @@ input[type='range'] {
   border-radius: 16px;
   text-align: left;
   font-size: 15px;
-  animation: rise 0.25s ease-out, glow 1s ease-in-out infinite;
+  animation: rise 0.25s ease-out;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 .action b {
   display: block;
@@ -630,7 +628,6 @@ input[type='range'] {
 .action.castle {
   background: #4c1d95;
   border-color: var(--chess);
-  --glow: #a78bfa;
 }
 .action.castle:hover:not(:disabled) {
   background: #5b21b6;
@@ -638,7 +635,6 @@ input[type='range'] {
 .action.enpassant {
   background: #92400e;
   border-color: var(--accent);
-  --glow: var(--accent);
 }
 .action.enpassant:hover:not(:disabled) {
   background: #b45309;
@@ -726,11 +722,6 @@ input[type='range'] {
     opacity: 0.5;
   }
 }
-@keyframes glow {
-  50% {
-    box-shadow: 0 0 22px var(--glow, var(--accent));
-  }
-}
 @keyframes rise {
   from {
     opacity: 0;
@@ -806,87 +797,120 @@ input[type='range'] {
 /* ───────── 로비 ───────── */
 
 .lobby {
-  max-width: 920px;
-  margin: 0 auto;
-  padding: 48px 16px 64px;
+  min-height: 100%;
   display: grid;
-  gap: 18px;
+  place-items: center;
+  padding: 32px 16px;
+  background:
+    radial-gradient(ellipse at 50% 35%, rgba(10, 18, 32, 0.55), var(--bg) 70%),
+    repeating-conic-gradient(rgba(255, 255, 255, 0.025) 0 25%, transparent 0 50%) 0 0 / 64px 64px,
+    var(--bg);
 }
-.lobby header {
+.hero {
+  width: min(480px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
   text-align: center;
 }
-.lobby header h1 {
-  margin: 0;
-  font-size: 44px;
-  font-weight: 900;
-  letter-spacing: -1px;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-.lobby header p {
-  margin: 6px 0 0;
+.brand h1 {
+  margin: 0;
+  font-size: 52px;
+  font-weight: 900;
+  letter-spacing: -1.5px;
 }
 .logo-glyph {
-  color: var(--accent);
-}
-.intro {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-.intro .panel {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-.intro-glyph {
-  font-size: 34px;
+  font-size: 48px;
   line-height: 1;
   color: var(--accent);
 }
-.intro b {
-  display: block;
-  margin-bottom: 2px;
+.tagline {
+  margin: -8px 0 6px;
+  color: var(--muted);
+  font-size: 15px;
 }
-.lobby-form {
-  display: grid;
-  grid-template-columns: 1fr 1.3fr 1fr 0.8fr 1fr auto;
+.play-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
-  align-items: end;
   padding: 16px;
+  border-radius: 18px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
 }
-.lobby-form label {
+.play-row {
+  display: flex;
+  gap: 8px;
+}
+.play-row .name {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  font-size: 17px;
+  padding: 0 16px;
+  border-radius: 12px;
+}
+button.play {
+  height: 52px;
+  padding: 0 34px;
+  border-radius: 12px;
+  border: 0;
+  background: var(--accent);
+  color: #1a1300;
+  font-size: 18px;
+  font-weight: 900;
+}
+button.play:hover:not(:disabled) {
+  background: #fde047;
+  border: 0;
+}
+.quick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  text-align: left;
+}
+.quick label {
   display: flex;
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
   color: var(--muted);
 }
-.lobby-form label b {
+.quick label b {
   color: var(--text);
 }
-.lobby-form input,
-.lobby-form select {
-  height: 36px;
-}
-.lobby-form input[type='range'] {
-  height: 36px;
+.quick input[type='range'] {
+  height: 34px;
 }
 .segmented {
   display: flex;
-  height: 36px;
-  border: 1px solid var(--line);
+  height: 34px;
+  padding: 3px;
+  gap: 3px;
   border-radius: 10px;
-  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
 }
 .segmented button {
   flex: 1;
   border: 0;
-  border-radius: 0;
+  border-radius: 7px;
   background: none;
-  padding: 0 6px;
+  padding: 0 4px;
+  font-size: 13px;
+  color: var(--muted);
 }
 .segmented button.active {
-  background: rgba(250, 204, 21, 0.2);
-  color: var(--accent);
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
   font-weight: 700;
 }
 .seed {
@@ -896,25 +920,74 @@ input[type='range'] {
 .seed input {
   width: 100%;
   min-width: 0;
+  height: 34px;
 }
-button.big {
-  font-size: 17px;
-  height: 44px;
-  padding: 0 28px;
-  border-radius: 12px;
+.seed button {
+  height: 34px;
 }
-.rules summary {
-  cursor: pointer;
-  font-weight: 700;
+button.link {
+  background: none;
+  border: 0;
+  padding: 2px 4px;
   color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
-.rules[open] summary {
-  margin-bottom: 10px;
+button.link:hover:not(:disabled) {
+  background: none;
+  border: 0;
+  color: var(--text);
+}
+.pillars {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  gap: 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.pillars li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pillars span {
+  font-family: var(--glyph-font);
+  font-size: 18px;
+  color: var(--text);
+}
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(2, 6, 23, 0.7);
+}
+.rules {
+  position: relative;
+  width: min(680px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 22px 24px;
+  background: var(--panel-solid);
+  text-align: left;
+}
+.rules .close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
 }
 .rules h2 {
   font-size: 15px;
-  margin: 14px 0 6px;
+  margin: 18px 0 6px;
   color: var(--accent);
+}
+.rules h2:first-of-type {
+  margin-top: 0;
 }
 .rules p,
 .rules li {
@@ -927,6 +1000,7 @@ button.big {
 .piece-table {
   width: 100%;
   border-collapse: collapse;
+  margin-top: 8px;
 }
 .piece-table td {
   padding: 6px 8px;
@@ -935,18 +1009,24 @@ button.big {
   line-height: 1.5;
 }
 .piece-table .glyph {
-  font-size: 26px;
+  font-size: 24px;
   line-height: 1;
-  width: 36px;
+  width: 34px;
 }
 .piece-table .num {
   white-space: nowrap;
 }
-@media (max-width: 860px) {
-  .lobby-form {
-    grid-template-columns: 1fr 1fr;
+@media (max-width: 560px) {
+  .brand h1 {
+    font-size: 40px;
   }
-  .intro {
+  .play-row {
+    flex-direction: column;
+  }
+  .play-row .name {
+    flex: none;
+  }
+  .quick {
     grid-template-columns: 1fr;
   }
   .piece-table .num {
@@ -1012,9 +1092,9 @@ button.danger-btn:hover:not(:disabled) {
   max-width: min(720px, calc(100vw - 32px));
   padding: 7px 8px 7px 10px;
   border-radius: 999px;
-  background: rgba(30, 58, 138, 0.88);
-  border: 1px solid #60a5fa;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  background: var(--panel-solid);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   font-size: 13px;
   animation: rise 0.3s ease-out;
 }
@@ -1025,8 +1105,8 @@ button.danger-btn:hover:not(:disabled) {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #60a5fa;
-  color: #0b1220;
+  background: var(--accent);
+  color: #1a1300;
   font-weight: 900;
 }
 .coach button {
@@ -1035,7 +1115,7 @@ button.danger-btn:hover:not(:disabled) {
 button.flat-link {
   background: none;
   border: 0;
-  color: #bfdbfe;
+  color: var(--muted);
   text-decoration: underline;
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as C from '../game/constants';
 import { PIECES, PIECE_ORDER } from '../game/pieces';
 import { DIFFICULTY } from '../game/bot';
@@ -6,12 +6,34 @@ import { fmt } from '../game/Game';
 
 const randomSeed = () => Math.floor(Math.random() * 99999) + 1;
 
+function Segmented({ value, options, onChange }) {
+  return (
+    <span className="segmented">
+      {options.map(([k, label, title]) => (
+        <button key={k} type="button" className={value === k ? 'active' : ''} title={title} onClick={() => onChange(k)}>
+          {label}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+// 첫 화면: 로고 · 이름 · 플레이 버튼이 전부. 나머지 설정은 접어 두고, 규칙은 창으로.
 export default function Lobby({ onStart, initial }) {
-  const [name, setName] = useState(initial?.name || '나');
+  const [name, setName] = useState(initial?.name || '');
   const [size, setSize] = useState(initial?.size || 'normal');
   const [bots, setBots] = useState(initial?.bots || C.MAP_SIZES.normal.bots);
   const [difficulty, setDifficulty] = useState(initial?.difficulty || 'normal');
   const [seed, setSeed] = useState(randomSeed);
+  const [more, setMore] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+
+  useEffect(() => {
+    if (!rulesOpen) return undefined;
+    const onKey = (e) => e.key === 'Escape' && setRulesOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [rulesOpen]);
 
   const start = (e) => {
     e.preventDefault();
@@ -20,93 +42,87 @@ export default function Lobby({ onStart, initial }) {
 
   return (
     <div className="lobby">
-      <header>
-        <h1>
-          <span className="logo-glyph">{PIECES.king.glyph}</span> OpenChess
-        </h1>
-        <p className="muted">OpenFront 식 영토 전쟁 + 체스 킹 · 기물 · 특수 규칙</p>
-      </header>
+      <main className="hero">
+        <div className="brand">
+          <span className="logo-glyph">{PIECES.king.glyph}</span>
+          <h1>OpenChess</h1>
+        </div>
+        <p className="tagline">땅을 넓히고, 기물로 이끌고, 킹을 지켜라</p>
 
-      <section className="intro">
-        <div className="panel">
-          <span className="intro-glyph">⚔</span>
-          <span>
-            <b>땅을 넓혀라</b>
-            <span className="small-text muted">클릭 한 번으로 공격 · 슬라이더로 병력 비율 · 바다는 배로. OpenFront 그대로</span>
-          </span>
-        </div>
-        <div className="panel">
-          <span className="intro-glyph">{PIECES.knight.glyph}</span>
-          <span>
-            <b>기물로 이끌어라</b>
-            <span className="small-text muted">버튼 1~5로 기물을 골라 공격 — 나이트는 돌파, 룩은 강공, 비숍은 상륙</span>
-          </span>
-        </div>
-        <div className="panel">
-          <span className="intro-glyph">{PIECES.king.glyph}</span>
-          <span>
-            <b>킹을 지켜라</b>
-            <span className="small-text muted">궁성에 적이 오면 체크! 캐슬링 · 앙파상 버튼이 그때 떠요</span>
-          </span>
-        </div>
-      </section>
-
-      <form className="panel lobby-form" onSubmit={start}>
-        <label>
-          이름
-          <input value={name} maxLength={12} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <label>
-          지도 크기
-          <span className="segmented">
-            {Object.entries(C.MAP_SIZES).map(([k, m]) => (
-              <button
-                key={k}
-                type="button"
-                className={size === k ? 'active' : ''}
-                title={`${m.width}×${m.height}`}
-                onClick={() => {
-                  setSize(k);
-                  setBots(m.bots);
-                }}
-              >
-                {m.label}
-              </button>
-            ))}
-          </span>
-        </label>
-        <label>
-          <span>
-            봇 나라 <b>{bots}</b>
-          </span>
-          <input type="range" min="2" max={C.MAX_BOTS} value={bots} onChange={(e) => setBots(Number(e.target.value))} />
-        </label>
-        <label>
-          난이도
-          <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
-            {Object.entries(DIFFICULTY).map(([k, d]) => (
-              <option key={k} value={k}>
-                {d.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          지도 번호
-          <span className="seed">
-            <input type="number" min="1" value={seed} onChange={(e) => setSeed(e.target.value)} />
-            <button type="button" onClick={() => setSeed(randomSeed())} title="다른 지도">
-              🎲
+        <form className="play-card" onSubmit={start}>
+          <div className="play-row">
+            <input className="name" value={name} maxLength={12} placeholder="닉네임" aria-label="닉네임" onChange={(e) => setName(e.target.value)} />
+            <button className="play" type="submit">
+              플레이
             </button>
-          </span>
-        </label>
-        <button className="go big" type="submit">
-          시작
-        </button>
-      </form>
+          </div>
 
-      <details className="panel rules">
-        <summary>규칙 보기</summary>
+          <div className="quick">
+            <label>
+              <span>지도</span>
+              <Segmented
+                value={size}
+                options={Object.entries(C.MAP_SIZES).map(([k, m]) => [k, m.label, `${m.width}×${m.height} · 봇 ${m.bots}`])}
+                onChange={(k) => {
+                  setSize(k);
+                  setBots(C.MAP_SIZES[k].bots);
+                }}
+              />
+            </label>
+            <label>
+              <span>난이도</span>
+              <Segmented value={difficulty} options={Object.entries(DIFFICULTY).map(([k, d]) => [k, d.label])} onChange={setDifficulty} />
+            </label>
+          </div>
+
+          {more ? (
+            <div className="quick more">
+              <label>
+                <span>
+                  봇 나라 <b>{bots}</b>
+                </span>
+                <input type="range" min="2" max={C.MAX_BOTS} value={bots} onChange={(e) => setBots(Number(e.target.value))} />
+              </label>
+              <label>
+                <span>지도 번호</span>
+                <span className="seed">
+                  <input type="number" min="1" value={seed} onChange={(e) => setSeed(e.target.value)} />
+                  <button type="button" onClick={() => setSeed(randomSeed())} title="다른 지도">
+                    🎲
+                  </button>
+                </span>
+              </label>
+            </div>
+          ) : (
+            <button type="button" className="link" onClick={() => setMore(true)}>
+              고급 설정
+            </button>
+          )}
+        </form>
+
+        <ul className="pillars">
+          <li>
+            <span>⚔</span>클릭으로 공격
+          </li>
+          <li>
+            <span>{PIECES.knight.glyph}</span>기물 1~5
+          </li>
+          <li>
+            <span>{PIECES.king.glyph}</span>체크를 막아라
+          </li>
+        </ul>
+        <button type="button" className="link" onClick={() => setRulesOpen(true)}>
+          규칙 보기
+        </button>
+      </main>
+
+      {rulesOpen && (
+        <div className="modal" onClick={() => setRulesOpen(false)} role="presentation">
+          <div className="panel rules" role="dialog" aria-label="규칙" onClick={(e) => e.stopPropagation()}>
+            <button className="icon close" type="button" onClick={() => setRulesOpen(false)} aria-label="닫기">
+              ✕
+            </button>
+
         <h2>기본 — OpenFront 그대로</h2>
         <ul>
           <li>빈 땅이나 적 땅을 클릭하면 슬라이더 비율(Q/E)만큼 병력을 보내 공격합니다. 바다 건너는 배로 갑니다.</li>
@@ -151,7 +167,9 @@ export default function Lobby({ onStart, initial }) {
             <b>프로모션</b> — 폰이 다른 기물을 이기면 그 기물로 바뀝니다.
           </li>
         </ul>
-      </details>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
