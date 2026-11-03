@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as C from '../game/constants';
-import { PIECES, pieceLabel } from '../game/pieces';
+import { PIECES } from '../game/pieces';
 import { fmt } from '../game/Game';
 import { isMuted } from './sound';
 
@@ -126,9 +126,9 @@ const MODES = [
   { key: 'hydrogen', label: '☢', name: '수소', hint: `수소폭탄 · 금 ${fmt(C.NUKES.hydrogen.cost)} · 반경 ${C.NUKES.hydrogen.radius}칸` },
 ];
 
-export function ControlPanel({ game, ratio, setRatio, mode, setMode, general, clearGeneral, onRetreat, onFocus }) {
+export function ControlPanel({ game, ratio, setRatio, mode, setMode, pieceType, clearPiece, onRetreat, onFocus }) {
   const p = game.human;
-  const spec = general ? PIECES[general.type] : null;
+  const spec = pieceType ? PIECES[pieceType] : null;
   const sending = Math.floor(p.troops * ratio);
   const nukeLocked = game.tick < C.NUKE_UNLOCK_TICK;
   const attacks = game.attacks.filter((a) => a.attacker === p.id);
@@ -139,7 +139,7 @@ export function ControlPanel({ game, ratio, setRatio, mode, setMode, general, cl
         <input type="range" min="1" max="100" value={Math.round(ratio * 100)} onChange={(e) => setRatio(e.target.value / 100)} />
         <span className="ratio-value">
           <b>{Math.round(ratio * 100)}%</b>
-          <span className="muted">{fmt(spec?.troopLoss ? sending * (1 - spec.troopLoss) : sending)}</span>
+          <span className="muted">{fmt(sending)}</span>
         </span>
       </label>
       <div className="modes">
@@ -161,14 +161,13 @@ export function ControlPanel({ game, ratio, setRatio, mode, setMode, general, cl
           );
         })}
       </div>
-      {mode === 'move' && <div className="hint">장군을 옮길 내 땅을 클릭하세요 · Esc 취소</div>}
-      {general && (
+      {spec && (
         <div className="leader">
           <span className="leader-glyph">{spec.glyph}</span>
           <span>
-            <b>{pieceLabel(general)}</b> <span className="muted">지휘 · 금 {fmt(spec.cost)}</span>
+            <b>{spec.name}</b> <span className="muted">다음 공격을 이끕니다 · 금 {fmt(spec.cost)}</span>
           </span>
-          <button className="small" onClick={clearGeneral} title="장군 선택 해제">
+          <button className="small" onClick={clearPiece} title="기물 선택 해제 (Esc)">
             ✕
           </button>
         </div>

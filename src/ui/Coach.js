@@ -20,8 +20,8 @@ const STEPS = [
   },
   {
     key: 'general',
-    text: '오른쪽 체스판에서 기물을 고르면(1~5) 그 장군이 다음 공격을 지휘해요',
-    when: (g, h) => h.tiles >= 150 && !h.generals.some((x) => x.restUntil > 0 || x.status === 'busy'),
+    text: '오른쪽 기물 버튼(1~5)을 누르고 공격하면 그 기물이 이끌어요 — 나이트는 돌파, 룩은 강공',
+    when: (g, h) => h.tiles >= 150 && !g.usedPiece,
   },
   {
     key: 'palace',

@@ -34,7 +34,7 @@ function scanNeighbors(game, pid) {
 
 function idle(game, p, types, reserve = 0) {
   for (const type of types) {
-    const g = p.generals.find((x) => x.type === type && x.status === 'idle' && game.tick >= x.restUntil);
+    const g = game.readyPiece(p.id, type);
     if (g && p.gold >= PIECES[type].cost + reserve) return g;
   }
   return null;
@@ -103,10 +103,7 @@ export function botThink(game, p) {
 
   // 체스 규칙부터: 위협받으면 캐슬링, 기회가 오면 앙파상
   const co = castleOptions(game, p.id);
-  if (co.available) {
-    const far = co.rooks.reduce((a, b) => (game.dist2(b.tile, p.king) > game.dist2(a.tile, p.king) ? b : a));
-    game.castle(p.id, far.id);
-  }
+  if (co.available) game.castle(p.id);
   for (const ev of enPassantOptions(game, p.id)) {
     if (ev.ok) {
       game.enPassant(p.id, ev.attackId);

@@ -59,11 +59,9 @@ export const NUKE_SPEED = 1.5; // 칸/틱
 export const NUKE_MIN_FLIGHT = 40; // 최소 4초 비행 → 캐슬링으로 피할 틈
 export const FALLOUT_TICKS = 600;
 
-// 장군
-export const GENERAL_SPEED = 1; // 재배치 이동 속도 (칸/틱)
-export const FORTRESS_RADIUS = 5; // 대기 중인 룩 · 퀸 주변은 요새
+// 기물
+export const FORTRESS_RADIUS = 5; // 성에 룩 · 퀸이 대기 중이면 킹 주변은 요새
 export const FORTRESS_MULT = 1.5;
-export const GENERAL_REST_TICKS = 150; // 공격을 마친 장군은 15초 쉬어야 다시 출격 (Kung Fu Chess 식 쿨다운)
 export const KNIGHT_WIDTH = 3; // 나이트 창끝 폭 (칸/틱)
 export const BISHOP_WIDTH = 1; // 비숍 대각선 띠: 직선에서 이만큼 벗어난 칸까지
 export const BISHOP_RATE = 3; // 비숍이 한 틱에 점령하는 칸 수
@@ -93,10 +91,8 @@ export const STATS_EVERY = 50; // 5초마다 영토 비율 기록
 // 체스 규칙
 export const THREAT_RADIUS = 8; // 킹 주변 이 거리 안에 공격 중인 적이 오면 '위협'
 export const EP_WINDOW = 100; // 앙파상: 최근 10초 안에 빼앗긴 땅만 친다
-export const EP_MIN_TILES = 30;
-export const EP_MIN_DEPTH = 8;
-export const EP_MIN_ENCIRCLE = 0.65;
-export const EP_PAWN_RANGE = 8;
+export const EP_MIN_TILES = 30; // 그 사이 30칸 이상 빼앗겼고
+export const EP_MIN_ENCIRCLE = 0.65; // 돌파 지역 둘레의 65% 이상이 우리 땅이면 (성에 폰이 있어야 함)
 
 // 승리: 다른 킹을 모두 잡거나 육지의 80% 를 차지
 export const WIN_LAND_SHARE = 0.8;

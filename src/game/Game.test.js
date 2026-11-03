@@ -64,7 +64,7 @@ describe('지도 크기', () => {
 });
 
 describe('시작 배치', () => {
-  test('킹과 체스 첫 줄 · 폰 여덟이 내 땅에 선다', () => {
+  test('킹과 체스 기물 15개(폰 여덟)가 성 안에서 대기한다', () => {
     const { game, add, at } = setup();
     const id = add('A', 20, 20);
     const p = game.players[id];
@@ -72,9 +72,8 @@ describe('시작 배치', () => {
     expect(p.generals.map((g) => g.type).sort()).toEqual(
       ['bishop', 'bishop', 'knight', 'knight', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'pawn', 'queen', 'rook', 'rook'].sort()
     );
-    for (const g of p.generals) expect(game.owner[g.tile]).toBe(id);
-    const rookA = p.generals.find((g) => g.id === `${id}:a`);
-    expect(rookA.tile).toBe(at(16, 20));
+    expect(p.generals.every((g) => g.status === 'idle')).toBe(true);
+    expect(game.readyPiece(id, 'knight')).not.toBeNull();
   });
 });
 
@@ -90,6 +89,7 @@ describe('킹', () => {
     game.players[a].gold = 0;
     game.players[b].troops = 100;
     game.players[b].gold = 10000;
+    for (const g of game.players[b].generals) g.status = 'captured'; // 체크 중 반격에 금을 쓰지 않게
     const res = game.launchAttack(a, game.players[b].king, { ratio: 1 });
     expect(res.ok).toBe(true);
     run(game, 200);
@@ -204,21 +204,20 @@ describe('장군', () => {
     void b;
   });
 
-  test('퀸은 출격할 때 투입 병력 4분의 1을 잃고 비용이 가장 비싸다', () => {
+  test('퀸은 가장 비싸고, 기물을 쓰면 금이 들고 출격 중에는 다시 고를 수 없다', () => {
     const { game, add, at } = setup();
     const a = add('A', 20, 20);
     const p = game.players[a];
     p.troops = 10000;
     p.gold = 20000;
-    const queen = game.findGeneral(a, `${a}:d`);
+    const queen = game.readyPiece(a, 'queen');
     game.launchAttack(a, at(40, 20), { ratio: 0.5, generalId: queen.id });
     expect(p.gold).toBe(20000 - PIECES.queen.cost);
-    expect(game.attacks[0].troops).toBe(3750);
-    expect(p.troops).toBe(5000);
+    expect(game.attacks[0].troops).toBe(5000);
+    expect(game.readyPiece(a, 'queen')).toBeNull();
     const costs = ['rook', 'bishop', 'knight', 'pawn'].map((t) => PIECES[t].cost);
     expect(Math.max(...costs)).toBeLessThan(PIECES.queen.cost);
   });
-
   test('나이트는 클릭한 곳을 향해 좁게 파고든다', () => {
     const { game, add, at } = setup({ width: 80 });
     const a = add('A', 10, 20);
@@ -251,20 +250,22 @@ describe('장군', () => {
     expect(game.owner[at(15, 37)]).toBe(0);
   });
 
-  test('공격이 끝나면 장군은 마지막으로 점령한 칸에 주둔하고, 그 칸을 빼앗기면 잡힌다', () => {
+  test('공격이 끝나면 기물은 성으로 돌아와 다시 대기하고, 성의 룩이 킹 주변을 요새로 만든다', () => {
     const { game, add, at } = setup();
     const a = add('A', 15, 20);
     const b = add('B', 40, 20);
     game.players[a].gold = 10000;
-    const rook = game.findGeneral(a, `${a}:h`);
     game.players[a].troops = 1000;
+    const rook = game.readyPiece(a, 'rook');
     game.launchAttack(a, at(25, 20), { ratio: 1, generalId: rook.id });
+    expect(rook.status).toBe('busy');
     run(game, 100);
     expect(rook.status).toBe('idle');
-    expect(game.owner[rook.tile]).toBe(a);
-    // B 가 그 칸을 빼앗는다
-    game.setOwner(rook.tile, b);
-    expect(rook.status).toBe('captured');
+    expect(game.inFortress(a, at(17, 20))).toBe(true);
+    expect(game.inFortress(a, at(30, 20))).toBe(false);
+    for (const g of game.players[a].generals) if (g.type === 'rook' || g.type === 'queen') g.status = 'captured';
+    expect(game.inFortress(a, at(17, 20))).toBe(false);
+    void b;
   });
 });
 
@@ -299,52 +300,55 @@ describe('프로모션', () => {
     return { game, a, b, pawn, knight };
   }
 
-  test('폰이 맞공격에서 나이트를 이기면 나이트를 잡고 프로모션 제안을 받는다', () => {
+  test('폰이 맞공격에서 나이트를 이기면 나이트를 잡고 바로 나이트로 프로모션한다', () => {
     const { game, a, pawn, knight } = clash();
     expect(knight.status).toBe('captured');
-    expect(game.players[a].offers).toEqual([expect.objectContaining({ generalId: pawn.id, toType: 'knight' })]);
-  });
-
-  test('프로모션은 거절할 수 있고, 받아들이면 다시 바꿀 수 없다', () => {
-    const { game, a, pawn } = clash();
-    expect(game.resolvePromotion(a, pawn.id, true).ok).toBe(true);
     expect(pawn.type).toBe('knight');
     expect(pawn.promoted).toBe(true);
-    game.offerPromotion(pawn, 'queen');
-    expect(game.players[a].offers).toHaveLength(0);
+    expect(game.events.some((e) => e.tag === 'promotion' && e.involved.includes(a))).toBe(true);
+  });
+  test('프로모션은 한 번뿐이다', () => {
+    const { game, pawn } = clash();
+    game.promote(pawn, 'queen');
     expect(pawn.type).toBe('knight');
   });
 
-  test('거절하면 폰으로 남는다', () => {
-    const { game, a, pawn } = clash();
-    game.resolvePromotion(a, pawn.id, false);
-    expect(pawn.type).toBe('pawn');
-    expect(pawn.promoted).toBe(false);
-  });
 });
 
 describe('캐슬링', () => {
-  test('위협이 없으면 못 하고, 위협받으면 룩과 자리를 바꾸며, 한 번뿐이다', () => {
+  test('위협이 없으면 못 하고, 위협받으면 킹이 영토 가장 안쪽으로 피신하며, 한 번뿐이다', () => {
     const { game, add, at } = setup();
     const a = add('A', 15, 20);
     const b = add('B', 26, 20);
     const p = game.players[a];
+    // A 에게 왼쪽으로 넓은 땅을 준다
+    for (let y = 5; y < 36; y++) for (let x = 1; x < 18; x++) if (!game.owner[at(x, y)]) game.setOwner(at(x, y), a);
     expect(castleOptions(game, a).available).toBe(false);
 
     game.players[b].troops = 30000;
     game.launchAttack(b, at(15, 20), { ratio: 0.5 });
     expect(kingThreat(game, a)).not.toBeNull();
-    const co = castleOptions(game, a);
-    expect(co.available).toBe(true);
-    const rook = co.rooks[0];
-    const rookTile = rook.tile;
-    const kingTile = p.king;
-    expect(game.castle(a, rook.id).ok).toBe(true);
-    expect(p.king).toBe(rookTile);
-    expect(rook.tile).toBe(kingTile);
+    expect(castleOptions(game, a).available).toBe(false); // 적이 다가오기만 해서는 못 한다
+    for (let i = 0; i < 100 && !p.check; i++) game.update();
+    expect(p.check).toBe(b);
+    expect(castleOptions(game, a).available).toBe(true);
+    const before = p.king;
+    expect(game.castle(a).ok).toBe(true);
+    expect(p.king).not.toBe(before);
+    expect(game.owner[p.king]).toBe(a);
+    expect(game.dist(p.king, game.players[b].king)).toBeGreaterThan(game.dist(before, game.players[b].king));
     expect(game.castle(a).ok).toBe(false);
   });
 
+  test('룩이 모두 잡히면 캐슬링할 수 없다', () => {
+    const { game, add, at } = setup();
+    const a = add('A', 15, 20);
+    const b = add('B', 26, 20);
+    for (const g of game.players[a].generals) if (g.type === 'rook') g.status = 'captured';
+    game.setOwner(at(17, 20), b);
+    run(game, 1);
+    expect(castleOptions(game, a).available).toBe(false);
+  });
   test('날아오는 핵도 위협으로 친다', () => {
     const { game, add } = setup();
     const a = add('A', 15, 20);
@@ -366,16 +370,13 @@ describe('앙파상', () => {
     for (let y = 5; y < 45; y++) {
       for (let x = 15; x < 65; x++) if (game.owner[at(x, y)] !== b) game.setOwner(at(x, y), a);
     }
-    const pa = game.players[a];
-    pa.troops = 5000;
-    const pawn = game.findGeneral(a, `${a}:pe`);
-    game.station(pawn, at(48, 22));
+    game.players[a].troops = 5000;
     const pb = game.players[b];
     pb.troops = 200000;
     pb.gold = 10000;
-    const knight = game.findGeneral(b, `${b}:g`);
+    const knight = game.readyPiece(b, 'knight');
     game.launchAttack(b, at(30, 25), { ratio: 1, generalId: knight.id });
-    return { game, a, b, at, pawn, knight };
+    return { game, a, b, at, knight };
   }
 
   test('얕게 들어온 공격에는 쓸 수 없다', () => {
@@ -385,25 +386,24 @@ describe('앙파상', () => {
     expect(ev.ok).toBe(false);
   });
 
-  test('깊이 들어온 돌파는 근처 폰으로 역포위해 되찾고 부대를 없앤다', () => {
-    const { game, a, b, pawn, knight } = breakthrough();
+  test('깊이 들어와 둘러싸인 돌파는 성의 폰이 출동해 되찾고, 부대의 기물을 잡아 프로모션한다', () => {
+    const { game, a, knight } = breakthrough();
     run(game, 12);
     const [ev] = enPassantOptions(game, a);
     expect(ev.checks.every((c) => c.ok)).toBe(true);
+    const pawn = ev.pawn;
     const before = game.players[a].tiles;
     const res = game.enPassant(a, ev.attackId);
     expect(res.ok).toBe(true);
     expect(game.players[a].tiles).toBe(before + ev.pocket.size);
     expect(game.attacks.find((x) => x.id === ev.attackId).done).toBe(true);
     expect(knight.status).toBe('captured');
-    expect(pawn.type).toBe('knight'); // 봇 폰은 바로 프로모션
-    void b;
+    expect(pawn.type).toBe('knight');
   });
 
-  test('폰이 멀리 있으면 쓸 수 없다', () => {
-    const { game, a, at, pawn } = breakthrough();
-    game.station(pawn, at(16, 6));
-    for (const g of game.players[a].generals) if (g.type === 'pawn' && g !== pawn) game.station(g, at(16, 44));
+  test('성에 폰이 없으면 쓸 수 없다', () => {
+    const { game, a } = breakthrough();
+    for (const g of game.players[a].generals) if (g.type === 'pawn') g.status = 'captured';
     run(game, 12);
     const [ev] = enPassantOptions(game, a);
     expect(ev.checks.find((c) => c.key === 'pawn').ok).toBe(false);
@@ -461,25 +461,6 @@ describe('외교', () => {
   });
 });
 
-describe('장군 쿨다운', () => {
-  test('공격을 마친 장군은 잠시 쉬어야 다시 출격할 수 있다', () => {
-    const { game, add, at } = setup();
-    const a = add('A', 15, 20);
-    add('B', 45, 30);
-    const p = game.players[a];
-    p.gold = 100000;
-    p.troops = 2000;
-    const rook = game.findGeneral(a, `${a}:h`);
-    game.launchAttack(a, at(30, 20), { ratio: 0.1, generalId: rook.id });
-    run(game, 60);
-    expect(rook.status).toBe('idle');
-    expect(game.tick).toBeLessThan(rook.restUntil);
-    p.troops = 2000;
-    expect(game.launchAttack(a, at(30, 20), { ratio: 0.1, generalId: rook.id }).ok).toBe(false);
-    game.tick = rook.restUntil;
-    expect(game.launchAttack(a, at(30, 20), { ratio: 0.1, generalId: rook.id }).ok).toBe(true);
-  });
-});
 
 describe('기록', () => {
   test('사람의 영토 비율과 잡은 기물이 기록된다', () => {
@@ -491,8 +472,7 @@ describe('기록', () => {
     run(game, C.STATS_EVERY * 2);
     expect(game.stats.history.length).toBeGreaterThanOrEqual(1);
     expect(game.stats.peak).toBeGreaterThan(0);
-    const pawn = game.findGeneral(b, `${b}:pa`);
-    game.setOwner(pawn.tile, a);
+    game.captureGeneral(game.readyPiece(b, 'pawn'), a, null);
     expect(game.stats.captured).toBe(1);
   });
 });

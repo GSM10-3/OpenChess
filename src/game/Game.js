@@ -48,7 +48,6 @@ export class Game {
     this.owner = new Int16Array(this.N); // 0 = 무주지
     this.fallout = new Int32Array(this.N); // 이 틱까지 방사능
     this.falloutZones = [];
-    this.stationed = new Map(); // 칸 → 그 칸에 대기 중인 장군들
     this.alliances = new Map(); // "a-b" → { until } 동맹
     this.hostile = new Map(); // "a-b" → 마지막으로 서로 싸운 틱
     this.allyRetry = new Map(); // "요청-대상" → 이 틱까지 다시 제안 못 함
@@ -151,7 +150,6 @@ export class Game {
       traitorUntil: 0, // 동맹을 깨면 이 틱까지 배신자
       allianceOffers: [], // 봇이 사람에게 보낸 동맹 제안 { from, until }
       generals: [],
-      offers: [], // 프로모션 제안 (사람만)
       killedBy: 0,
       deathCause: null,
       bot: { nextThink: 0 },
@@ -197,13 +195,9 @@ export class Game {
         type: f.type,
         file: f.file,
         promoted: false,
-        status: 'idle',
-        tile: -1,
-        move: null,
-        restUntil: 0, // 이 틱까지 휴식 (출격 불가)
+        status: 'idle', // 기물은 지도에 서지 않고 성(킹) 안에서 대기한다: idle · busy(출격 중) · captured
       };
       p.generals.push(g);
-      this.station(g, this.nearestOwned(pid, x0 + f.dx, y0 + f.dy, tile));
     }
     return true;
   }
@@ -219,32 +213,9 @@ export class Game {
     return ok('시작!');
   }
 
-  nearestOwned(pid, x, y, fallback) {
-    for (let r = 0; r <= 8; r++) {
-      for (let dy = -r; dy <= r; dy++) {
-        for (let dx = -r; dx <= r; dx++) {
-          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-          const xx = x + dx;
-          const yy = y + dy;
-          if (xx < 0 || yy < 0 || xx >= this.W || yy >= this.H) continue;
-          const t = yy * this.W + xx;
-          if (this.owner[t] === pid) return t;
-        }
-      }
-    }
-    return fallback;
-  }
-
-  // 장군이 돌아갈 곳: 원하는 칸이 아직 내 땅이면 거기, 아니면 킹 곁
-  homeTile(p, wanted) {
-    if (wanted >= 0 && this.owner[wanted] === p.id) return wanted;
-    return p.king;
-  }
-
   // ───────────── 땅 주인 바꾸기 ─────────────
 
-  // captorPlayer/captorGeneral: 이 칸을 빼앗아 주둔 장군을 잡은 쪽 (프로모션 판정용)
-  setOwner(t, pid, captorGeneral = null) {
+  setOwner(t, pid) {
     const old = this.owner[t];
     if (old === pid) return;
     const x = t % this.W;
@@ -263,11 +234,6 @@ export class Game {
     }
     this.owner[t] = pid;
     this.dirty.push(t);
-
-    const here = this.stationed.get(t);
-    if (here) {
-      for (const g of [...here]) if (g.owner !== pid) this.captureGeneral(g, pid, captorGeneral);
-    }
     if (old && this.players[old].alive && this.players[old].king === t) {
       this.eliminate(old, pid, pid ? 'conquest' : 'nuke');
     }
@@ -287,13 +253,7 @@ export class Game {
     } else {
       this.log(`♚ 체크메이트! ${josa(k.name, '이/가')} ${v.name}의 킹을 잡았습니다`, 'big', [vid, killerId], 'checkmate');
     }
-    for (const g of v.generals) {
-      if (g.status === 'captured') continue;
-      this.unstation(g);
-      g.status = 'captured';
-      g.move = null;
-    }
-    v.offers = [];
+    for (const g of v.generals) g.status = 'captured';
     for (const a of this.attacks) if (a.attacker === vid) a.done = true;
     for (const b of this.boats) if (b.owner === vid) b.done = true;
     for (const n of this.nukes) if (n.owner === vid) n.done = true;
@@ -309,28 +269,11 @@ export class Game {
     }
   }
 
-  // ───────────── 장군 ─────────────
+  // ───────────── 기물 ─────────────
 
-  station(g, t) {
-    this.unstation(g);
-    g.tile = t;
-    g.status = 'idle';
-    g.move = null;
-    if (t < 0) return;
-    let set = this.stationed.get(t);
-    if (!set) this.stationed.set(t, (set = new Set()));
-    set.add(g);
-  }
-
-  unstation(g) {
-    if (g.tile >= 0) {
-      const set = this.stationed.get(g.tile);
-      if (set) {
-        set.delete(g);
-        if (!set.size) this.stationed.delete(g.tile);
-      }
-    }
-    g.tile = -1;
+  // 성(킹) 안의 대기 중인 기물 하나 (출격 · 앙파상에 쓴다)
+  readyPiece(pid, type) {
+    return this.players[pid].generals.find((g) => g.type === type && g.status === 'idle') || null;
   }
 
   findGeneral(pid, gid) {
@@ -340,11 +283,8 @@ export class Game {
 
   captureGeneral(g, captorPlayer, captorGeneral) {
     if (g.status === 'captured') return;
-    this.unstation(g);
     g.status = 'captured';
-    g.move = null;
     const owner = this.players[g.owner];
-    owner.offers = owner.offers.filter((o) => o.generalId !== g.id);
     const cp = captorPlayer ? this.players[captorPlayer] : null;
     const who = cp ? cp.name : '핵폭발';
     if (this.humanId && captorPlayer === this.humanId) this.stats.captured++;
@@ -356,77 +296,24 @@ export class Game {
       'capture',
       { type: g.type }
     );
-    if (captorGeneral) this.offerPromotion(captorGeneral, g.type);
+    if (captorGeneral) this.promote(captorGeneral, g.type);
   }
 
-  // 폰이 다른 장군을 이기면 그 기물로 바꿀 기회를 준다 (봇은 바로 바꾼다)
-  offerPromotion(pawn, toType) {
-    if (pawn.type !== 'pawn' || pawn.promoted || pawn.status === 'captured') return;
-    if (toType === 'pawn' || toType === 'king' || !PIECES[toType]) return;
-    const p = this.players[pawn.owner];
-    if (!p.isHuman) {
-      this.promote(pawn, toType);
-      return;
-    }
-    const ex = p.offers.find((o) => o.generalId === pawn.id);
-    if (ex) {
-      if (PIECES[toType].value > PIECES[ex.toType].value) ex.toType = toType;
-      return;
-    }
-    p.offers.push({ generalId: pawn.id, toType, tick: this.tick });
-    this.log(`♟ ${josa(pieceLabel(pawn), '이/가')} ${josa(PIECES[toType].name, '을/를')} 꺾었습니다 — 프로모션할 수 있습니다`, 'chess', [p.id]);
-  }
-
-  resolvePromotion(pid, gid, accept) {
-    const p = this.players[pid];
-    const offer = p.offers.find((o) => o.generalId === gid);
-    if (!offer) return fail('프로모션 제안이 없습니다');
-    p.offers = p.offers.filter((o) => o !== offer);
-    const g = this.findGeneral(pid, gid);
-    if (!g || g.status === 'captured' || g.type !== 'pawn' || g.promoted) return fail('이 폰은 프로모션할 수 없습니다');
-    if (!accept) {
-      this.log(`♟ ${josa(pieceLabel(g), '은/는')} 폰으로 남았습니다`, 'chess', [pid]);
-      return ok('폰 유지');
-    }
-    this.promote(g, offer.toType);
-    return ok(`${josa(PIECES[offer.toType].name, '으로/로')} 프로모션`);
-  }
-
+  // 폰이 다른 기물을 이기면 그 기물로 바로 바뀐다 (한 번만)
   promote(g, type) {
+    if (g.type !== 'pawn' || g.promoted || g.status === 'captured') return;
+    if (type === 'pawn' || type === 'king' || !PIECES[type]) return;
     g.type = type;
     g.promoted = true;
     const p = this.players[g.owner];
     this.log(`${PIECES[type].glyph} 프로모션! ${p.name}의 폰(${g.file})이 ${josa(PIECES[type].name, '이/가')} 되었습니다`, 'chess', [p.id], 'promotion', { type });
   }
 
-  moveGeneral(pid, gid, tile) {
-    const g = this.findGeneral(pid, gid);
-    if (!g || g.status !== 'idle') return fail('대기 중인 장군만 옮길 수 있습니다');
-    if (this.owner[tile] !== pid) return fail('내 영토로만 옮길 수 있습니다');
-    if (tile === g.tile) return fail('이미 그 자리에 있습니다');
-    const from = g.tile;
-    this.unstation(g);
-    g.status = 'moving';
-    g.move = { from, to: tile, start: this.tick, end: this.tick + Math.max(1, Math.ceil(this.dist(from, tile) / C.GENERAL_SPEED)) };
-    return ok(`${pieceLabel(g)} 이동 중`);
-  }
-
-  stepMovers() {
-    for (const p of this.players) {
-      if (!p || !p.alive) continue;
-      for (const g of p.generals) {
-        if (g.status !== 'moving' || this.tick < g.move.end) continue;
-        this.station(g, this.homeTile(p, g.move.to));
-      }
-    }
-  }
-
+  // 성에 룩 · 퀸이 대기 중이면 킹 주변이 요새
   inFortress(pid, t) {
-    const r2 = C.FORTRESS_RADIUS * C.FORTRESS_RADIUS;
-    for (const g of this.players[pid].generals) {
-      if (g.status === 'idle' && PIECES[g.type].fortress && this.dist2(g.tile, t) <= r2) return true;
-    }
-    return false;
+    const p = this.players[pid];
+    if (this.dist2(p.king, t) > C.FORTRESS_RADIUS * C.FORTRESS_RADIUS) return false;
+    return p.generals.some((g) => g.status === 'idle' && PIECES[g.type].fortress);
   }
 
   inPalace(pid, t) {
@@ -601,19 +488,13 @@ export class Game {
   commitForces(p, ratio, general) {
     const spec = general ? PIECES[general.type] : null;
     if (spec && p.gold < spec.cost) return fail(`${spec.name} 출격에는 금 ${fmt(spec.cost)}이 필요합니다`);
-    let troops = Math.floor(p.troops * Math.min(1, Math.max(0, ratio)));
+    const troops = Math.floor(p.troops * Math.min(1, Math.max(0, ratio)));
     if (troops < 1) return fail('보낼 병력이 없습니다');
     p.troops -= troops;
     if (spec) {
       p.gold -= spec.cost;
-      if (spec.troopLoss) {
-        const lost = Math.floor(troops * spec.troopLoss);
-        troops -= lost;
-        this.log(`${spec.glyph} ${p.name}의 퀸 출격 — 투입 병력 ${fmt(lost)} 손실`, 'chess', [p.id]);
-      }
-      this.unstation(general);
       general.status = 'busy';
-      general.move = null;
+      if (p.isHuman) this.usedPiece = true; // 첫 판 안내용
     }
     return { ok: true, troops };
   }
@@ -666,7 +547,6 @@ export class Game {
     if (generalId) {
       general = this.findGeneral(pid, generalId);
       if (!general || general.status !== 'idle') return fail('그 장군은 지금 출격할 수 없습니다');
-      if (this.tick < general.restUntil) return fail(`${josa(pieceLabel(general), '은/는')} 휴식 중입니다 — ${Math.ceil((general.restUntil - this.tick) / 10)}초 뒤 출격`);
     }
     const spec = general ? PIECES[general.type] : null;
     const frontier = !forceBoat && (!spec || spec.land) ? this.borderWith(pid, target) : null;
@@ -869,10 +749,7 @@ export class Game {
     if (!p.alive) return;
     p.troops += a.troops;
     a.troops = 0;
-    if (a.general && a.general.status === 'busy') {
-      this.station(a.general, this.homeTile(p, a.lastTile >= 0 ? a.lastTile : a.origin));
-      a.general.restUntil = this.tick + C.GENERAL_REST_TICKS;
-    }
+    if (a.general && a.general.status === 'busy') a.general.status = 'idle'; // 성으로 돌아온다
   }
 
   retreat(pid, attackId) {
@@ -1019,10 +896,7 @@ export class Game {
     const target = this.owner[L];
     if (target === b.owner || (target && (this.peaceLeft() || this.allied(b.owner, target)))) {
       p.troops += b.troops;
-      if (b.general) {
-        this.station(b.general, L);
-        b.general.restUntil = this.tick + C.GENERAL_REST_TICKS;
-      }
+      if (b.general) b.general.status = 'idle';
       return;
     }
     const a = this.newAttack({
@@ -1039,10 +913,7 @@ export class Game {
     if (this.kingGuarded(target, L) || !this.capture(a, L)) {
       a.done = true;
       this.log(`${p.name}의 상륙이 해안에서 막혔습니다`, 'info', [b.owner, target]);
-      if (b.general) {
-        this.station(b.general, p.king);
-        b.general.restUntil = this.tick + C.GENERAL_REST_TICKS;
-      }
+      if (b.general) b.general.status = 'idle';
       return;
     }
     if (b.general && a.surpriseLeft > 0) {
@@ -1124,12 +995,6 @@ export class Game {
       const p = this.players[o];
       p.troops = Math.max(0, p.troops - cnt * before.get(o) * 1.5);
     }
-    for (const p of this.players) {
-      if (!p || !p.alive) continue;
-      for (const g of p.generals) {
-        if (g.status === 'idle' && this.dist2(g.tile, n.to) <= r2) this.captureGeneral(g, 0, null);
-      }
-    }
     for (const b of this.boats) {
       if (!b.done && this.dist2(b.tile, n.to) <= r2) {
         b.done = true;
@@ -1147,20 +1012,57 @@ export class Game {
 
   // ───────────── 체스 규칙 ─────────────
 
-  castle(pid, rookId = null) {
+  // 캐슬링: 체크(위협) 중에 한 번, 룩이 킹을 영토 가장 안쪽(국경에서 가장 먼 칸)으로 옮긴다
+  castle(pid) {
     const p = this.players[pid];
     const co = castleOptions(this, pid);
     if (!co.available) return fail(co.reason);
-    const rook = rookId ? co.rooks.find((g) => g.id === rookId) : co.rooks[0];
-    if (!rook) return fail('그 룩과는 캐슬링할 수 없습니다');
-    const kingTile = p.king;
-    p.king = rook.tile;
-    this.station(rook, kingTile);
+    const tile = this.innermostTile(pid);
+    if (tile < 0 || tile === p.king) return fail('더 안쪽으로 피할 곳이 없습니다');
+    p.king = tile;
     p.castled = true;
-    this.log(`♜ 캐슬링! ${p.name}의 킹이 ${josa(pieceLabel(rook), '과/와')} 자리를 바꿨습니다`, 'chess', [pid], 'castle');
-    return ok('캐슬링 완료');
+    p.check = 0;
+    this.log(`♜ 캐슬링! ${p.name}의 룩이 킹을 안쪽 성으로 옮겼습니다`, 'chess', [pid], 'castle');
+    return ok('캐슬링 — 킹이 안쪽으로 피신했습니다');
   }
 
+  // 내 영토 칸 중 남의 땅 · 무주지 · 바다에서 가장 먼 칸 (국경에서 시작하는 BFS)
+  innermostTile(pid) {
+    const { N, nbr, owner } = this;
+    const dist = new Int32Array(N).fill(-1);
+    const q = new Int32Array(N);
+    let qt = 0;
+    for (let t = 0; t < N; t++) {
+      if (owner[t] !== pid) continue;
+      for (let k = 0; k < 4; k++) {
+        const n = nbr[t * 4 + k];
+        if (n < 0 || owner[n] !== pid) {
+          dist[t] = 0;
+          q[qt++] = t;
+          break;
+        }
+      }
+    }
+    let best = -1;
+    let bestD = -1;
+    for (let qh = 0; qh < qt; qh++) {
+      const t = q[qh];
+      if (dist[t] > bestD) {
+        bestD = dist[t];
+        best = t;
+      }
+      for (let k = 0; k < 4; k++) {
+        const n = nbr[t * 4 + k];
+        if (n >= 0 && owner[n] === pid && dist[n] < 0) {
+          dist[n] = dist[t] + 1;
+          q[qt++] = n;
+        }
+      }
+    }
+    return best;
+  }
+
+  // 앙파상: 성의 폰이 출동해 깊이 파고든 적 부대를 역포위 — 돌파 지역을 되찾고 부대를 섬멸
   enPassant(pid, attackId) {
     const a = this.attacks.find((x) => x.id === attackId && !x.done);
     if (!a || a.target !== pid) return fail('그 공격은 이미 끝났습니다');
@@ -1169,27 +1071,17 @@ export class Game {
     const pawn = ev.pawn;
     const p = this.players[pid];
     const att = this.players[a.attacker];
-    let sx = 0;
-    let sy = 0;
-    for (const t of ev.pocket) {
-      this.setOwner(t, pid, pawn);
-      sx += t % this.W;
-      sy += (t / this.W) | 0;
-    }
+    for (const t of ev.pocket) this.setOwner(t, pid);
     const lostTroops = a.troops;
     a.done = true;
     a.troops = 0;
     this.log(
-      `♟ 앙파상! ${p.name}의 ${josa(pieceLabel(pawn), '이/가')} ${att.name}의 돌파 부대를 역포위 — ${ev.pocket.size}칸 탈환, 병력 ${fmt(lostTroops)} 섬멸`,
+      `♟ 앙파상! ${p.name}의 폰이 ${att.name}의 돌파 부대를 역포위 — ${ev.pocket.size}칸 탈환, 병력 ${fmt(lostTroops)} 섬멸`,
       'chess',
       [pid, a.attacker],
       'enpassant'
     );
     if (a.general) this.captureGeneral(a.general, pid, pawn);
-    const c = Math.round(sy / ev.pocket.size) * this.W + Math.round(sx / ev.pocket.size);
-    if (pawn.status !== 'captured') {
-      this.station(pawn, this.nearestOwned(pid, c % this.W, (c / this.W) | 0, pawn.tile >= 0 ? pawn.tile : p.king));
-    }
     return ok('앙파상 성공');
   }
 
@@ -1217,7 +1109,6 @@ export class Game {
     }
     this.stepDiplomacy();
     for (const p of this.players) if (p && !p.isHuman) botThink(this, p);
-    this.stepMovers();
     for (const a of this.attacks) if (!a.done) this.stepAttack(a);
     this.stepBoats();
     this.stepNukes();

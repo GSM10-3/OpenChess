@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Game } from '../game/Game';
 import * as C from '../game/constants';
-import { PIECES, pieceLabel, josa } from '../game/pieces';
+import { PIECES, josa } from '../game/pieces';
 import { castleOptions, enPassantOptions } from '../game/chess';
 import MapView, { focusTile } from './MapView';
 import { TopBar, Leaderboard, ControlPanel, EventLog } from './Hud';
-import ChessPanel, { PromotionDialog } from './ChessPanel';
+import ChessPanel from './ChessPanel';
 import ChessBanner from './ChessBanner';
 import Coach from './Coach';
 import { isMuted, setMuted } from './sound';
@@ -38,8 +38,8 @@ export default function GameScreen({ config, onExit, onRestart }) {
   const uiRef = useRef({});
 
   const [ratio, setRatio] = useState(0.3);
-  const [mode, setMode] = useState('attack'); // attack | boat | atom | hydrogen | move
-  const [generalId, setGeneralId] = useState(null);
+  const [mode, setMode] = useState('attack'); // attack | boat | atom | hydrogen
+  const [pieceType, setPieceType] = useState(null); // 다음 공격을 이끌 기물 종류
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [toast, setToast] = useState(null);
@@ -72,19 +72,18 @@ export default function GameScreen({ config, onExit, onRestart }) {
   );
 
   const playing = game.phase === 'play' && human.alive;
-  const castle = playing ? castleOptions(game, human.id) : { available: false, reason: '', threat: null, rooks: [] };
+  const castle = playing ? castleOptions(game, human.id) : { available: false, reason: '', threat: null };
   const ep = playing ? enPassantOptions(game, human.id) : [];
   const epReady = ep.find((e) => e.ok);
-  const selected = generalId ? game.findGeneral(human.id, generalId) : null;
-  // 잡히거나 출격한 장군은 선택에서 뺀다
-  const leader = selected && selected.status === 'idle' ? selected : null;
-  uiRef.current = { mode, generalId, epPocket: epReady ? epReady.pocket : null, threat: castle.threat };
+  // 고른 종류의 기물 중 성에서 대기 중인 하나가 다음 공격을 이끈다
+  const leader = pieceType && playing ? game.readyPiece(human.id, pieceType) : null;
+  uiRef.current = { mode, epPocket: epReady ? epReady.pocket : null, threat: castle.threat };
 
   const focus = (tile, zoom) => focusTile(camRef.current, game, tile, zoom);
 
   const cancel = () => {
     setMode('attack');
-    if (mode === 'attack') setGeneralId(null);
+    if (mode === 'attack') setPieceType(null);
   };
 
   const handleTileClick = (tile) => {
@@ -102,22 +101,12 @@ export default function GameScreen({ config, onExit, onRestart }) {
       if (res.ok) setMode('attack');
       return;
     }
-    if (mode === 'move') {
-      const res = game.moveGeneral(human.id, generalId, tile);
-      show(res);
-      if (res.ok) setMode('attack');
-      return;
-    }
-    if (game.owner[tile] === human.id) {
-      const here = game.stationed.get(tile);
-      const mine = here && [...here].find((g) => g.owner === human.id);
-      if (mine) setGeneralId(mine.id === generalId ? null : mine.id);
-      return;
-    }
+    if (game.owner[tile] === human.id) return;
+    if (pieceType && !leader) return show({ ok: false, msg: `성에 대기 중인 ${josa(PIECES[pieceType].name, '이/가')} 없습니다` });
     const res = game.launchAttack(human.id, tile, { ratio, generalId: leader?.id, forceBoat: mode === 'boat' });
     show(res);
     if (res.ok) {
-      if (leader) setGeneralId(null);
+      if (leader) setPieceType(null);
       if (mode === 'boat') setMode('attack');
     }
   };
@@ -128,7 +117,7 @@ export default function GameScreen({ config, onExit, onRestart }) {
     const k = e.key.toLowerCase();
     if (k === 'escape') {
       setMode('attack');
-      setGeneralId(null);
+      setPieceType(null);
     } else if (k === ' ') {
       e.preventDefault();
       setPaused((v) => !v);
@@ -136,15 +125,8 @@ export default function GameScreen({ config, onExit, onRestart }) {
     else if (k === 'q') setRatio((r) => Math.max(0.05, Math.round((r - 0.1) * 100) / 100));
     else if (k === 'e') setRatio((r) => Math.min(1, Math.round((r + 0.1) * 100) / 100));
     else if (k === 'k' && human.king >= 0) focus(human.king, 6);
-    else if (k === 'c' && castle.available) show(game.castle(human.id, castle.rooks[0].id));
-    else if (PIECE_KEYS[k] && playing) {
-      // 같은 종류의 대기 중인 기물을 차례로 고른다
-      const ready = human.generals.filter((g) => g.type === PIECE_KEYS[k] && g.status === 'idle');
-      if (!ready.length) return show({ ok: false, msg: `대기 중인 ${PIECES[PIECE_KEYS[k]].name}이 없습니다` });
-      const i = ready.findIndex((g) => g.id === generalId);
-      setGeneralId(ready[(i + 1) % ready.length].id);
-    }
-    return undefined;
+    else if (k === 'c' && castle.available) show(game.castle(human.id));
+    else if (PIECE_KEYS[k] && playing) setPieceType((t) => (t === PIECE_KEYS[k] ? null : PIECE_KEYS[k]));
   };
   useEffect(() => {
     const onKey = (e) => {
@@ -155,7 +137,6 @@ export default function GameScreen({ config, onExit, onRestart }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const offer = human.offers[0];
   const allyOffer = human.allianceOffers[0];
   const checkLeft = playing && human.check ? Math.max(0, Math.ceil((C.CHECKMATE_TICKS - (game.tick - human.checkSince)) / 10)) : 0;
 
@@ -201,31 +182,17 @@ export default function GameScreen({ config, onExit, onRestart }) {
             setRatio={setRatio}
             mode={mode}
             setMode={setMode}
-            general={leader}
-            clearGeneral={() => setGeneralId(null)}
+            pieceType={pieceType}
+            clearPiece={() => setPieceType(null)}
             onRetreat={(id) => show(game.retreat(human.id, id))}
             onFocus={(t) => focus(t, 5)}
           />
-          <ChessPanel
-            game={game}
-            generalId={generalId}
-            threat={castle.threat}
-            onSelect={(id) => {
-              setGeneralId(id);
-              if (mode === 'move') setMode('attack');
-            }}
-            onFocus={(t) => focus(t, 6)}
-            onMove={(id) => {
-              setGeneralId(id);
-              setMode('move');
-            }}
-          />
+          <ChessPanel game={game} pieceType={pieceType} threat={castle.threat} onPick={setPieceType} onFocus={(t) => focus(t, 6)} />
           <EventLog game={game} />
           <ChessBanner game={game} />
 
           {/* 체스 규칙은 쓸 수 있을 때만 화면 가운데 아래에 큰 버튼으로 뜬다 */}
           <div className="action-dock">
-            {offer && <PromotionDialog game={game} offer={offer} onResolve={(gid, yes) => show(game.resolvePromotion(human.id, gid, yes))} />}
             {allyOffer && (
               <div className="panel action-card alliance">
                 <div className="promo-glyphs">🤝</div>
@@ -243,22 +210,21 @@ export default function GameScreen({ config, onExit, onRestart }) {
                 </div>
               </div>
             )}
-            {castle.available &&
-              castle.rooks.map((r) => (
-                <button key={r.id} className="action castle" onClick={() => show(game.castle(human.id, r.id))} title="단축키 C">
-                  <span className="action-glyph">{PIECES.rook.glyph}</span>
-                  <span>
-                    <b>캐슬링</b>
-                    <small>킹 ↔ {josa(pieceLabel(r), '과/와')} 자리 바꾸기</small>
-                  </span>
-                </button>
-              ))}
+            {castle.available && (
+              <button className="action castle" onClick={() => show(game.castle(human.id))} title="단축키 C · 한 판에 한 번">
+                <span className="action-glyph">{PIECES.rook.glyph}</span>
+                <span>
+                  <b>캐슬링</b>
+                  <small>룩이 킹을 영토 가장 안쪽으로 피신 (C)</small>
+                </span>
+              </button>
+            )}
             {epReady && (
               <button className="action enpassant" onClick={() => show(game.enPassant(human.id, epReady.attackId))}>
                 <span className="action-glyph">{PIECES.pawn.glyph}</span>
                 <span>
                   <b>앙파상</b>
-                  <small>{game.players[epReady.attacker].name}의 돌파 부대를 역포위</small>
+                  <small>폰 출동 — {game.players[epReady.attacker].name}의 돌파 부대를 역포위</small>
                 </span>
               </button>
             )}

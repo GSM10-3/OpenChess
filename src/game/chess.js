@@ -46,24 +46,18 @@ export function kingThreat(game, pid) {
   return null;
 }
 
-// 캐슬링: 킹이 위협받을 때, 킹과 떨어져 대기 중인 룩과 자리를 바꾼다 (한 판에 한 번)
+// 캐슬링: 체크이거나 핵이 킹을 노릴 때 한 번, 룩이 살아 있으면 킹을 영토 안쪽으로 피신시킨다
 export function castleOptions(game, pid) {
   const p = game.players[pid];
-  const res = { available: false, reason: '', threat: null, rooks: [] };
+  const res = { available: false, reason: '', threat: null };
   if (!p || !p.alive || !p.spawned) {
     res.reason = '아직 킹이 없습니다';
     return res;
   }
   res.threat = kingThreat(game, pid); // 캐슬링을 이미 했어도 위협 표시는 계속한다
-  if (p.castled) {
-    res.reason = '캐슬링은 한 판에 한 번만 할 수 있습니다';
-    return res;
-  }
-  res.rooks = p.generals.filter(
-    (g) => g.type === 'rook' && g.status === 'idle' && g.tile !== p.king && game.owner[g.tile] === pid
-  );
-  if (!res.threat) res.reason = '킹이 위협받을 때만 할 수 있습니다';
-  else if (!res.rooks.length) res.reason = '킹과 떨어진 곳에 대기 중인 룩이 없습니다';
+  if (p.castled) res.reason = '캐슬링은 한 판에 한 번만 할 수 있습니다';
+  else if (!res.threat || (res.threat.kind !== 'check' && res.threat.kind !== 'nuke')) res.reason = '체크일 때(또는 핵이 킹을 노릴 때)만 할 수 있습니다';
+  else if (!p.generals.some((g) => g.type === 'rook' && g.status !== 'captured')) res.reason = '살아 있는 룩이 없습니다';
   else res.available = true;
   return res;
 }
@@ -80,35 +74,6 @@ export function evaluatePocket(game, a) {
     if (owner[t] === a.attacker) pocket.add(t);
   }
 
-  // 깊이: 적의 원래 땅(또는 상륙한 해안)에서 돌파 지역 안으로 몇 칸 들어왔나
-  const dist = new Map();
-  const queue = [];
-  for (const t of pocket) {
-    for (let k = 0; k < 4; k++) {
-      const n = nbr[t * 4 + k];
-      if (n < 0) continue;
-      if (terrain[n] === C.WATER || (owner[n] === a.attacker && !pocket.has(n))) {
-        dist.set(t, 0);
-        queue.push(t);
-        break;
-      }
-    }
-  }
-  let depth = 0;
-  if (!queue.length && pocket.size) depth = Infinity; // 본진과 끊겨 이미 고립됨
-  for (let h = 0; h < queue.length; h++) {
-    const t = queue[h];
-    const d = dist.get(t);
-    if (d > depth) depth = d;
-    for (let k = 0; k < 4; k++) {
-      const n = nbr[t * 4 + k];
-      if (n >= 0 && pocket.has(n) && !dist.has(n)) {
-        dist.set(n, d + 1);
-        queue.push(n);
-      }
-    }
-  }
-
   // 포위율: 돌파 지역 바깥 둘레 중 우리 땅의 비율
   const ext = new Set();
   let mine = 0;
@@ -121,23 +86,7 @@ export function evaluatePocket(game, a) {
     }
   }
   const encircle = ext.size ? mine / ext.size : 0;
-
-  // 가까이 대기 중인 폰
-  const p = game.players[pid];
-  let pawn = null;
-  let best = Infinity;
-  for (const g of p.generals) {
-    if (g.type !== 'pawn' || g.status !== 'idle') continue;
-    for (const t of pocket) {
-      const d2 = game.dist2(g.tile, t);
-      if (d2 < best) {
-        best = d2;
-        pawn = g;
-      }
-    }
-  }
-  const pawnDist = Math.sqrt(best);
-  if (pawnDist > C.EP_PAWN_RANGE) pawn = null;
+  const pawn = game.readyPiece(pid, 'pawn');
 
   const checks = [
     {
@@ -147,12 +96,6 @@ export function evaluatePocket(game, a) {
       value: `${pocket.size}칸`,
     },
     {
-      key: 'depth',
-      label: `${C.EP_MIN_DEPTH}칸 이상 깊이 침투`,
-      ok: depth >= C.EP_MIN_DEPTH,
-      value: depth === Infinity ? '고립됨' : `${depth}칸`,
-    },
-    {
       key: 'encircle',
       label: `돌파 지역 둘레의 ${Math.round(C.EP_MIN_ENCIRCLE * 100)}% 이상이 우리 땅`,
       ok: encircle >= C.EP_MIN_ENCIRCLE,
@@ -160,16 +103,15 @@ export function evaluatePocket(game, a) {
     },
     {
       key: 'pawn',
-      label: `${C.EP_PAWN_RANGE}칸 안에 대기 중인 폰`,
+      label: '성에 대기 중인 폰',
       ok: !!pawn,
-      value: pawn ? `${pieceLabel(pawn)} · ${Math.round(pawnDist)}칸` : '없음',
+      value: pawn ? pieceLabel(pawn) : '없음',
     },
   ];
   return {
     attackId: a.id,
     attacker: a.attacker,
     pocket,
-    depth,
     encircle,
     pawn,
     checks,

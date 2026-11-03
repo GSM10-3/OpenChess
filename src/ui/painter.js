@@ -8,7 +8,6 @@ const TERRAIN_RGB = [null, [190, 199, 146], [170, 162, 118], [143, 136, 125]];
 const DEEP = [20, 44, 72];
 const SHALLOW = [33, 68, 104];
 const FALLOUT = [150, 235, 70];
-const BOT_PIECE_ZOOM = 8; // 이보다 멀리서 볼 때는 봇의 장군을 그리지 않는다
 const GLYPH_FONT ='"Segoe UI Symbol", "Noto Sans Symbols 2", "DejaVu Sans", "Apple Symbols", serif';
 
 export function hexToRgb(hex) {
@@ -137,7 +136,7 @@ function arrow(ctx, x1, y1, x2, y2, color, width) {
   ctx.fill();
 }
 
-// ui: { mode, generalId, epPocket, threat }
+// ui: { mode, epPocket, threat }
 export function drawScene(ctx, game, painter, cam, view, ui, hover, now) {
   const { dpr, w, h } = view;
   const z = cam.zoom;
@@ -268,62 +267,8 @@ export function drawScene(ctx, game, painter, cam, view, ui, hover, now) {
     ctx.globalAlpha = 1;
   }
 
-  // 대기 중인 장군
-  // 화면에서 서로 겹치는 같은 나라 기물은 하나로 묶어 가장 높은 기물 + 개수로 그린다
+  // 출격한 기물 크기 (기물은 성 안에서 대기하므로 지도에는 출격 중일 때만 보인다)
   const gSize = clamp(z * 2.4, 16, 30);
-  const clusters = [];
-  for (const [tile, set] of game.stationed) {
-    for (const g of set) {
-      const owner = game.players[g.owner];
-      if (!owner.isHuman && z < BOT_PIECE_ZOOM) continue;
-      let [x, y] = S(tile);
-      if (tile === owner.king) {
-        x += gSize * 0.7;
-        y += gSize * 0.5;
-      }
-      let c = clusters.find((k) => k.owner === owner && Math.abs(k.x - x) < gSize * 0.9 && Math.abs(k.y - y) < gSize * 0.9);
-      if (!c) clusters.push((c = { owner, x, y, top: g, count: 0, selected: false }));
-      c.count++;
-      if (g.id === ui.generalId) {
-        c.selected = true;
-        c.top = g;
-      } else if (!c.selected && PIECES[g.type].value > PIECES[c.top.type].value) {
-        c.top = g;
-      }
-    }
-  }
-  for (const c of clusters) {
-    if (c.selected) {
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, gSize * 0.85, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(253, 224, 71, ${0.6 + 0.4 * pulse})`;
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    }
-    drawPiece(ctx, PIECES[c.top.type].glyph, c.x, c.y, gSize, c.owner.color, c.owner.isHuman ? '#f8fafc' : 'rgba(15,23,42,0.85)');
-    if (c.count > 1) {
-      ctx.beginPath();
-      ctx.arc(c.x + gSize * 0.5, c.y - gSize * 0.45, gSize * 0.3, 0, Math.PI * 2);
-      ctx.fillStyle = '#0f172a';
-      ctx.fill();
-      outlinedText(ctx, String(c.count), c.x + gSize * 0.5, c.y - gSize * 0.45, gSize * 0.4, 700);
-    }
-  }
-
-  // 재배치 중인 장군
-  for (const p of game.players) {
-    if (!p || !p.alive || (!p.isHuman && z < BOT_PIECE_ZOOM)) continue;
-    for (const g of p.generals) {
-      if (g.status !== 'moving') continue;
-      const m = g.move;
-      const f = clamp((game.tick - m.start) / (m.end - m.start), 0, 1);
-      const x = sx(tx(m.from) * (1 - f) + tx(m.to) * f);
-      const y = sy(ty(m.from) * (1 - f) + ty(m.to) * f);
-      ctx.globalAlpha = 0.75;
-      drawPiece(ctx, PIECES[g.type].glyph, x, y, gSize, p.color, '#bae6fd');
-      ctx.globalAlpha = 1;
-    }
-  }
 
   // 내 궁성: 체크면 빨갛게 깜빡인다
   const me = game.human;
@@ -387,8 +332,7 @@ export function drawScene(ctx, game, painter, cam, view, ui, hover, now) {
       ctx.lineWidth = 2;
       ctx.stroke();
     } else {
-      const ok = mode !== 'move' || game.owner[hover] === hid;
-      ctx.strokeStyle = ok ? 'rgba(255,255,255,0.9)' : 'rgba(248,113,113,0.9)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(x - z / 2, y - z / 2, z, z);
     }

@@ -1,13 +1,12 @@
-// 장군(체스 기물) 정의
+// 기물 정의. 기물은 지도에 서지 않고 성(킹) 안에서 대기하다가, 고르면 다음 공격을 이끈다.
 // land/sea: 지상 공격 · 보트 상륙에 쓸 수 있는지
 // landPower/seaPower: 전투력 배율 (점령 비용을 이 값으로 나눈다)
 // landSpeed/seaSpeed: 전선 확장 속도 · 배 속도 배율
 // surprise: 상륙 직후 방어 병력을 무시하고 점령하는 칸 수 (기습)
 // navalBattle: 근처 적 배와 해전을 벌인다
-// fortress: 대기 중이면 주둔지 주변 방어 ×1.5
+// fortress: 성에 대기 중이면 킹 주변 방어 ×1.5
 // breakthrough: 좁은 창끝으로 목표를 향해 돌파, 지형 · 요새 무시
 // diagonal: 클릭한 쪽 대각선으로 좁고 길게 뻗는다
-// troopLoss: 출격할 때 투입 병력 중 잃는 비율
 
 const T = '︎'; // 글리프를 이모지가 아니라 글자로 그리게 한다
 
@@ -16,7 +15,7 @@ export const PIECES = {
     name: '킹',
     glyph: '♚' + T,
     value: 100,
-    role: '움직일 수 없습니다. 킹이 있는 칸을 빼앗기거나 핵에 맞으면 패배합니다.',
+    role: '수도. 킹을 잃으면 패배합니다.',
   },
   queen: {
     name: '퀸',
@@ -25,15 +24,14 @@ export const PIECES = {
     cost: 9000,
     land: true,
     sea: true,
-    landPower: 3.4,
+    landPower: 2.6,
     landSpeed: 1.4,
-    seaPower: 3.4,
+    seaPower: 2.6,
     seaSpeed: 2.5,
     surprise: 40,
     navalBattle: true,
     fortress: true,
-    troopLoss: 0.25,
-    role: '비숍 + 룩. 지상 · 상륙 · 해전 · 기습 모두 가능. 대신 출격할 때마다 투입 병력 25% 손실, 비용 최대.',
+    role: '룩 + 비숍. 땅 · 바다 모두 가장 강하게 (가장 비쌈)',
   },
   rook: {
     name: '룩',
@@ -44,7 +42,7 @@ export const PIECES = {
     landPower: 1.5,
     landSpeed: 1.3,
     fortress: true,
-    role: '육군 · 지상전. 넓은 전선을 빠르게 밀고, 대기 중이면 주변을 요새로 만듭니다. 캐슬링 상대.',
+    role: '강공. 넓은 전선을 세게 밀고, 성에 있으면 킹 주변이 요새',
   },
   bishop: {
     name: '비숍',
@@ -59,7 +57,7 @@ export const PIECES = {
     seaSpeed: 2,
     surprise: 25,
     navalBattle: true,
-    role: '대각선 · 해군. 땅에서는 클릭한 쪽 대각선으로 좁고 길게 뻗고, 바다에서는 배가 2배 빠르며 해전 · 상륙 기습을 합니다.',
+    role: '대각선 돌파 · 상륙. 배가 빠르고 상륙하자마자 기습',
   },
   knight: {
     name: '나이트',
@@ -70,7 +68,7 @@ export const PIECES = {
     landPower: 1.8,
     landSpeed: 1,
     breakthrough: true,
-    role: '전방 · 정면돌파. 클릭한 곳을 향해 좁은 창끝으로 파고들며 지형과 요새를 무시합니다.',
+    role: '정면돌파. 클릭한 곳까지 좁게 뚫고 들어감 (킹 저격)',
   },
   pawn: {
     name: '폰',
@@ -81,7 +79,7 @@ export const PIECES = {
     sea: true,
     landPower: 1.1,
     seaPower: 1.1,
-    role: '조커픽. 육지 · 바다 어디든 출격. 다른 장군과의 전투에서 이기면 그 기물로 프로모션할 수 있습니다.',
+    role: '싸고 어디든. 기물을 잡으면 그 기물로 프로모션',
   },
 };
 
